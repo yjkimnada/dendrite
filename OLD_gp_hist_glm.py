@@ -32,8 +32,8 @@ from gpytorch.likelihoods.noise_models import MultitaskHomoskedasticNoise
 from multitask_gp import MultitaskGPModel
 from gp_variational_elbo import VariationalELBO
 
-class GP_GLM_Likelihood( _GaussianLikelihoodBase):
-    def __init__(self, C_den, sub_no, N, num_tasks, device,
+class GP_Hist_GLM_Likelihood( _GaussianLikelihoodBase):
+    def __init__(self, C_den, sub_no, N, num_tasks,
         rank=0,
         task_correlation_prior=None,
         batch_shape=torch.Size(),
@@ -59,10 +59,8 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
                 )
         elif task_correlation_prior is not None:
             raise ValueError("Can only specify task_correlation_prior if rank>0")
-        
         self.num_tasks = num_tasks
         self.rank = rank
-        self.device = device
                 
         self.C_den = C_den
         self.sub_no = sub_no
@@ -129,7 +127,7 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
     def expected_log_prob(self, target: Tensor, input: MultivariateNormal, S_e, S_i, *params: Any, **kwargs: Any) -> Tensor:        
         all_F = input.mean.T
              
-        decay_dist = torch.arange(self.N).reshape(1,-1).repeat(self.num_tasks,1).to(self.device) + self.shift.reshape(-1,1)
+        decay_dist = torch.arange(self.N).reshape(1,-1).repeat(self.num_tasks,1).cuda() + self.shift.reshape(-1,1)
         decay_dist_2 = decay_dist ** 2
         decay_factor = self.scale.reshape(-1,1)**2 * torch.exp(-decay_dist_2 / self.decay.reshape(-1,1)**2)
         
@@ -138,12 +136,12 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
         T = S_e.shape[0]
         
         F_e = all_F[:self.sub_no].unsqueeze(1)
-        F_i = all_F[self.sub_no:].unsqueeze(1)
+        F_i = all_F[self.sub_no:self.sub_no*2].unsqueeze(1)
         flip_F_e = torch.flip(F_e, [2])
         flip_F_i = torch.flip(F_i, [2])
         
-        pad_S_e = torch.zeros(T + self.N-1, self.sub_no).to(self.device)
-        pad_S_i = torch.zeros(T + self.N-1, self.sub_no).to(self.device)
+        pad_S_e = torch.zeros(T + self.N-1, self.sub_no).cuda()
+        pad_S_i = torch.zeros(T + self.N-1, self.sub_no).cuda()
         pad_S_e[-T:] = pad_S_e[-T:] + S_e
         pad_S_i[-T:] = pad_S_i[-T:] + S_i
         pad_S_e = pad_S_e.T.unsqueeze(0)
@@ -156,30 +154,25 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
 
         #----- Combine Subunits -----#
 
-        sub_out = torch.zeros(T, self.sub_no).to(self.device)
-        
-        for s in range(self.sub_no):
-            sub_idx = -s-1
-            leaf_idx = torch.where(self.C_den[sub_idx] == 1)[0]
+        sub_out = torch.zeros(T+self.N, self.sub_no).cuda()
+        F_hist = all_F[self.sub_no*2:].unsqueeze(1)
 
-            if torch.numel(leaf_idx) == 0:
-                nonlin_out = torch.tanh(syn_in[:,sub_idx] + self.Theta[sub_idx]) # (T_data,) 
-                sub_out[:,sub_idx] = sub_out[:,sub_idx] + nonlin_out
-            else:
-                leaf_in = sub_out[:,leaf_idx] * torch.exp(self.W_log[leaf_idx]) # (T_data,)
-                nonlin_in = syn_in[:,sub_idx] + torch.sum(leaf_in, 1) + self.Theta[sub_idx]# (T_data,)
-                nonlin_out = torch.tanh(nonlin_in)
-                sub_out[:,sub_idx] = sub_out[:,sub_idx] + nonlin_out
+        for t in range(T):
+            sub_hist = sub_out[t:t+self.N,:].clone() 
+            sub_hist_in = F.conv1d(sub_hist.T.unsqueeze(0) , F_hist, groups=self.sub_no).flatten() #(1, sub_no, 1)
+            
+            sub_prop = torch.matmul(sub_out[self.T_no+t-1].clone()*torch.exp(self.W_log) , self.C_den.T)
+            Y_out = torch.tanh(syn_in[t] + sub_prop + self.Theta + sub_hist_in)
+            sub_out[t+self.N] = sub_out[t+self.N] + Y_out        
         
-        final_voltage = sub_out[:,0]*torch.exp(self.W_log[0]) + self.V_o
-
+        final_voltage = sub_out[self.N:,0]*torch.exp(self.W_log[0]) + self.V_o
         res = torch.var(target - final_voltage)
         
         return res, final_voltage, all_F
 
 
-class GP_GLM(nn.Module):
-    def __init__(self, C_den, E_no, I_no, T_no, sparse_no, batch_size, greedy, C_syn_e, C_syn_i, device):
+class GP_Hist_GLM(nn.Module):
+    def __init__(self, C_den, E_no, I_no, T_no, sparse_no, batch_size, greedy, C_syn_e, C_syn_i):
         super().__init__()
 
         self.C_den = C_den
@@ -190,13 +183,12 @@ class GP_GLM(nn.Module):
         self.greedy = greedy
         self.C_syn_e = C_syn_e
         self.C_syn_i = C_syn_i
-        self.num_tasks = self.sub_no * 2
+        self.num_tasks = self.sub_no * 3
         self.sparse_no = sparse_no
         self.batch_size = batch_size
-        self.device = device
 
         self.filter_model = MultitaskGPModel(self.num_tasks, self.sparse_no , self.T_no)
-        self.likelihood = GP_GLM_Likelihood(self.C_den, self.sub_no, self.T_no, self.num_tasks, device)
+        self.likelihood = GP_Hist_GLM_Likelihood(self.C_den, self.sub_no, self.T_no, self.num_tasks)
         self.mll = VariationalELBO(self.likelihood, self.filter_model, num_data=self.batch_size)
 
         ### C_syn Parameters ###
@@ -209,8 +201,8 @@ class GP_GLM(nn.Module):
 
         if self.greedy == True:
             if test == True:
-                C_syn_e = torch.zeros_like(self.C_syn_e_logit).to(self.device)
-                C_syn_i = torch.zeros_like(self.C_syn_i_logit).to(self.device)
+                C_syn_e = torch.zeros_like(self.C_syn_e_logit).cuda()
+                C_syn_i = torch.zeros_like(self.C_syn_i_logit).cuda()
                 for i in range(C_syn_e.shape[1]):
                     idx = torch.argmax(self.C_syn_e_logit[:,i])
                     C_syn_e[idx,i] = 1
@@ -219,8 +211,8 @@ class GP_GLM(nn.Module):
                     C_syn_i[idx,i] = 1
             
             elif test == False:
-                u_e = torch.rand_like(self.C_syn_e_logit).to(self.device)
-                u_i = torch.rand_like(self.C_syn_i_logit).to(self.device)
+                u_e = torch.rand_like(self.C_syn_e_logit).cuda()
+                u_i = torch.rand_like(self.C_syn_i_logit).cuda()
                 eps = 1e-8
                 g_e = -torch.log(- torch.log(u_e + eps) + eps)
                 g_i = -torch.log(- torch.log(u_i + eps) + eps)
@@ -234,8 +226,8 @@ class GP_GLM(nn.Module):
         syn_e = torch.matmul(S_e, C_syn_e.T)
         syn_i = torch.matmul(S_i, C_syn_i.T)
 
-        x_in = torch.arange(self.T_no).to(self.device)
+        x_in = torch.arange(self.T_no).cuda()
         filter_output = self.filter_model(x_in)
-        var_loss, V_pred, out_filters = self.mll(filter_output, V_ref, syn_e, syn_i)
+        var_loss, V_pred, out_filters = self.mll(filter_output, V_ref, S_e, S_i)
 
         return var_loss, V_pred, out_filters, C_syn_e, C_syn_i

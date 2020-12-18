@@ -1,5 +1,7 @@
-from gp_glm import GP_GLM
-from GP_Hist_GLM import GP_Hist_GLM
+#from gp_glm import GP_GLM
+#from gp_hist_glm import GP_Hist_GLM
+from alpha_glm import Alpha_GLM
+from alpha_cos_glm import Alpha_Cos_GLM
 
 import numpy as np
 import torch
@@ -11,90 +13,84 @@ from sklearn import metrics
 
 def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                 T_no, batch_size, iter_no, epoch_no, C_den, C_syn_e, C_syn_i, 
-                sparse_no, save_dir):
+                sparse_no, device, save_dir):
 
-    V_train = V[:T_train]
-    V_test = V[T_train:T_train + T_test].cuda()
-    test_E_neural = E_neural[T_train:T_train+T_test].cuda()
-    test_I_neural = I_neural[T_train:T_train+T_test].cuda()
-    train_E_neural = E_neural[:T_train]
-    train_I_neural = I_neural[:T_train]
+    V_train = V[:T_train].to(device)
+    V_test = V[T_train:T_train + T_test].to(device)
+    test_E_neural = E_neural[T_train:T_train+T_test].to(device)
+    test_I_neural = I_neural[T_train:T_train+T_test].to(device)
+    train_E_neural = E_neural[:T_train].to(device)
+    train_I_neural = I_neural[:T_train].to(device)
     E_no = E_neural.shape[1]
     I_no = I_neural.shape[1]
+    C_syn_e = C_syn_e.to(device)
+    C_syn_i = C_syn_i.to(device)
 
-    batch_no = (train_V_ref.shape[0] - batch_size) * epoch_no
-    train_idx = np.empty((repeat_no, train_V_ref.shape[0] - batch_size))
+    batch_no = (T_train - batch_size) * epoch_no
+    train_idx = np.empty((epoch_no, T_train - batch_size))
     for i in range(epoch_no):
-        part_idx = np.arange(train_V_ref.shape[0] - batch_size)
+        part_idx = np.arange(T_train - batch_size)
         np.random.shuffle(part_idx)
         train_idx[i] = part_idx
     train_idx = train_idx.flatten()
     train_idx = torch.from_numpy(train_idx)
 
-    if model_type == "gp":
-        model = GP_GLM(C_den=C_den,
-                            E_no=E_no,
-                            I_no=I_no,
-                            T_no=T_no,
-                            sparse_no=sparse_no,
-                            batch_size=batch_size,
-                            greedy=False,
-                            C_syn_e=C_syn_e,
-                            C_syn_i=C_syn_i)
+    if model_type == "alpha":
+        model = Alpha_GLM(C_den=C_den,
+                         E_no=E_no,
+                         I_no=I_no,
+                         T_no=T_no,
+                         greedy=False,
+                         C_syn_e=C_syn_e,
+                         C_syn_i=C_syn_i,
+                         device = device)
 
         optimizer = torch.optim.Adam([
-            {'params': model.filter_model.parameters()},
-            {'params': model.likelihood.parameters()},
+            {'params': model.parameters()},
+            ], lr = 0.005)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
+    elif model_type == "alpha_cos":
+        model = Alpha_Cos_GLM(C_den=C_den,
+                         E_no=E_no,
+                         I_no=I_no,
+                         T_no=T_no,
+                         greedy=False,
+                         C_syn_e=C_syn_e,
+                         C_syn_i=C_syn_i,
+                         device = device)
+
+        optimizer = torch.optim.Adam([
             {'params': model.parameters()},
             ], lr = 0.005)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
 
-    elif model_type == "gp_hist":
-        model == GP_Hist_GLM(C_den=C_den,
-                            E_no=E_no,
-                            I_no=I_no,
-                            T_no=T_no,
-                            sparse_no=sparse_no,
-                            batch_size=batch_size,
-                            greedy=False,
-                            C_syn_e=C_syn_e,
-                            C_syn_i=C_syn_i)
-
-        optimizer = torch.optim.Adam([
-            {'params': model.filter_model.parameters()},
-            {'params': model.likelihood.parameters()},
-            {'params': model.parameters()},
-            ], lr = 0.005)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
-
-    model.cuda()
+    model.to(device)
 
     for i in tnrange(iter_no):
         model.train()
         optimizer.zero_grad()
         
         batch_idx = train_idx[i].long()
-        batch_E_neural = train_E_neural[batch_idx : batch_idx+batch_size].cuda()
-        batch_I_neural = train_I_neural[batch_idx : batch_idx+batch_size].cuda()
-        batch_V = V_train[batch_idx : batch_idx+batch_size].cuda()
+        batch_E_neural = train_E_neural[batch_idx : batch_idx+batch_size]
+        batch_I_neural = train_I_neural[batch_idx : batch_idx+batch_size]
+        batch_V = V_train[batch_idx : batch_idx+batch_size]
 
 
-        batch_loss, batch_pred, out_filters, C_syn_e, C_syn_i = model(V_ref=batch_V,
-                                                                    S_e=batch_E_neural,
-                                                                    S_i=batch_I_neural,
-                                                                    temp=None,
-                                                                    test=False)
+        batch_pred, out_filters, C_syn_e, C_syn_i = model(S_e=batch_E_neural,
+                                                                S_i=batch_I_neural,
+                                                                temp=None,
+                                                                test=False)
+        batch_loss = torch.var(batch_V - batch_pred)
         batch_loss.backward()
         optimizer.step()
         scheduler.step()
 
         if i%100 == 0:
             model.eval()
-            test_loss, test_pred, out_filters, C_syn_e, C_syn_i = model(V_ref=V_test
-                                                                        S_e=test_E_neural,
-                                                                        S_i=test_I_neural,
-                                                                        temp=None,
-                                                                        test=True)
+            test_pred, out_filters, C_syn_e, C_syn_i = model(S_e=test_E_neural,
+                                                                    S_i=test_I_neural,
+                                                                    temp=None,
+                                                                    test=True)
             test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
                                                       y_pred=test_pred.cpu().detach().numpy(),
                                                       multioutput='uniform_average')
@@ -104,39 +100,38 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
     for param in model.parameters():
         param.requires_grad=False
 
-    model.likelihood.V_o.requires_grad = True
+    model.V_o.requires_grad = True
 
-    optimizer = torch.optim.Adam([model.likelihood.V_o], lr=0.25)
+    optimizer = torch.optim.Adam([model.V_o], lr=0.25)
     scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
 
     for i in range(1200):
         optimizer.zero_grad()
-        batch_loss, batch_pred, out_filters, C_syn_e, C_syn_i = model(V_ref=V_train,
-                                                                    S_e=train_E_neural,
-                                                                    S_i=train_I_neural,
-                                                                    temp=None,
-                                                                    test=False)
+        batch_pred, out_filters, C_syn_e, C_syn_i = model(S_e=train_E_neural,
+                                                                S_i=train_I_neural,
+                                                                temp=None,
+                                                                test=False)
+        batch_loss = torch.mean((V_train - batch_pred)**2)
         batch_loss.backward()
         optimizer.step()
 
     model.eval()
-    test_loss, test_pred, out_filters, C_syn_e, C_syn_i = model(V_ref=V_test
-                                                                    S_e=test_E_neural,
-                                                                    S_i=test_I_neural,
-                                                                    temp=None,
-                                                                    test=True)
+    test_pred, out_filters, C_syn_e, C_syn_i = model(S_e=test_E_neural,
+                                                            S_i=test_I_neural,
+                                                            temp=None,
+                                                            test=True)
     test_pred = test_pred.cpu().detach().numpy()
     C_syn_e = C_syn_e.cpu().detach().numpy()
     C_syn_i = C_syn_i.cpu().detach().numpy()
     out_filters = out_filters.cpu().detach().numpy()
 
     test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
-                                                    y_pred=test_pred.cpu().detach().numpy(),
+                                                    y_pred=test_pred,
                                                     multioutput='uniform_average')
     print(test_score)
 
-    torch.save(model.state_dict(), save_dir+"gp_model.pt")
-    np.savez(save_dir+"gp_output.npz",
+    torch.save(model.state_dict(), save_dir+"alpha_model.pt")
+    np.savez(save_dir+"alpha_output.npz",
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,

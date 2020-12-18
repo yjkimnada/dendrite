@@ -1,4 +1,5 @@
 from gpytorch.mlls._approximate_mll import _ApproximateMarginalLogLikelihood
+import torch
 
 class VariationalELBO(_ApproximateMarginalLogLikelihood):
     
