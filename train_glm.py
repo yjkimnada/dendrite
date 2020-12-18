@@ -1,7 +1,5 @@
-#from gp_glm import GP_GLM
-#from gp_hist_glm import GP_Hist_GLM
-from alpha_glm import Alpha_GLM
-from alpha_cos_glm import Alpha_Cos_GLM
+from models.alpha_glm import Alpha_GLM
+from models.alpha_cos_glm import Alpha_Cos_GLM
 
 import numpy as np
 import torch
@@ -114,6 +112,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
         batch_loss = torch.mean((V_train - batch_pred)**2)
         batch_loss.backward()
         optimizer.step()
+        if i%100 == 0:
+            print(batch_loss)
 
     model.eval()
     test_pred, out_filters, C_syn_e, C_syn_i = model(S_e=test_E_neural,
@@ -135,7 +135,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,
-                    filters = filters)
+                    filters = out_filters)
 
 
     
