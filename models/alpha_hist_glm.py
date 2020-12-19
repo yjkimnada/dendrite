@@ -30,27 +30,11 @@ class Alpha_Cos_GLM(nn.Module):
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
 
         ### History Parameters ###
-        self.cos_scale = 4
-        self.cos_basis_no = 12
-        self.cos_shift = 1
+        self.hist_basis_no = 3
         
-        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*0.01 , requires_grad=True)
-        self.hist_basis = torch.empty(self.cos_basis_no, self.T_no).to(self.device)
-        for i in range(self.cos_basis_no):
-            phi = 1.5707963267948966*i
-            xmin = phi - 3.141592653589793
-            xmax = phi + 3.141592653589793
-
-            x_in = torch.arange(self.T_no).float().to(self.device)
-            raw_cos = self.cos_scale * torch.log(x_in + self.cos_shift)
-            small_idx = torch.where(raw_cos < xmin)[0]
-            big_idx = torch.where(raw_cos > xmax)[0]
-
-            basis = 0.5*torch.cos(raw_cos - phi) + 0.5
-            basis[small_idx] = 0.0
-            basis[big_idx] = 0.0
-            self.hist_basis[i] = basis
-
+        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.hist_basis_no)*0.05 , requires_grad=True)
+        self.hist_basis = nn.Parameter(torch.randn(self.hist_basis_no, self.T_no)*0.05 , requires_grad=True)
+        
         ### C_syn Parameters ###
         if self.greedy == True:
             self.C_syn_e_logit = nn.Parameter(torch.ones(self.sub_no, self.E_no), requires_grad=True)
@@ -126,13 +110,13 @@ class Alpha_Cos_GLM(nn.Module):
         syn_in = filtered_e + filtered_i
 
         sub_out = torch.zeros(T_data+self.T_no, self.sub_no).to(self.device)
-        hist_kern = torch.matmul(self.hist_weights, self.hist_basis).unsqueeze(1)
+        hist_kern = torch.matmul(self.hist_weights, self.hist_basis) #(sub_no, T_no)
         #######
-        hist_kern = torch.flip(hist_kern, [2])
+        #hist_kern = torch.flip(hist_kern, [2])
         
         for t in range(T_data):
-            sub_hist = sub_out[t:t+self.T_no,:].clone() 
-            sub_hist_in = F.conv1d(sub_hist.T.unsqueeze(0) , hist_kern, groups=self.sub_no).flatten() #(1, sub_no, 1)
+            sub_hist = sub_out[t:t+self.T_no,:].clone()  #(T_no, sub_no)
+            sub_hist_in = torch.sum(sub_hist.T * hist_kern, 1).flatten()
             
             sub_prop = torch.matmul(sub_out[self.T_no+t-1].clone()*self.W_sub , self.C_den.T)
             Y_out = torch.tanh(syn_in[t] + sub_prop + self.Theta + sub_hist_in)
@@ -143,7 +127,7 @@ class Alpha_Cos_GLM(nn.Module):
         e_kern_out = torch.flip(full_e_kern, [2]).squeeze(1)
         i_kern_out = torch.flip(full_i_kern, [2]).squeeze(1)
         #########
-        hist_kern_out = torch.flip(hist_kern, [2]).squeeze(1)
+        #hist_kern_out = torch.flip(hist_kern, [2]).squeeze(1)
         out_filters = torch.vstack((e_kern_out, i_kern_out, hist_kern_out))
 
         return final_voltage, out_filters, C_syn_e, C_syn_i

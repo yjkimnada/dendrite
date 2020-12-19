@@ -17,9 +17,11 @@ class Alpha_GLM(nn.Module):
         self.device = device
 
         ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.randn(self.sub_no, 2) * 0.1, requires_grad=True)
-        self.Tau_syn = nn.Parameter(torch.ones(self.sub_no, 2) , requires_grad=True)
-        self.Delta_syn = nn.Parameter(torch.rand(self.sub_no, 2), requires_grad=True)
+        self.W_syn = nn.Parameter(torch.randn(self.sub_no, 2, 2) * 0.1, requires_grad=True)
+        #self.Tau_syn = nn.Parameter(torch.ones(self.sub_no, 2, 2) , requires_grad=True)
+        self.Tau_syn_raw = torch.arange(1.1,4,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
+        self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
+        self.Delta_syn = nn.Parameter(torch.rand(self.sub_no, 2, 2), requires_grad=True)
         
         ### Ancestor Subunit Parameters ###
         self.W_sub = nn.Parameter(torch.rand(self.sub_no) , requires_grad=True)
@@ -63,20 +65,26 @@ class Alpha_GLM(nn.Module):
         syn_e = torch.matmul(S_e, C_syn_e.T)
         syn_i = torch.matmul(S_i, C_syn_i.T)
 
-        t_raw_e = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
-        t_raw_i = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
+        full_e_kern = torch.zeros(self.sub_no, self.T_no).to(self.device)
+        full_i_kern = torch.zeros(self.sub_no, self.T_no).to(self.device)
+        
+        for b in range(2):
+            t_raw_e = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
+            t_raw_i = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
 
-        t_e = t_raw_e - self.Delta_syn[:,0].reshape(-1,1)
-        t_i = t_raw_i - self.Delta_syn[:,1].reshape(-1,1)
-        t_e[t_e < 0.0] = 0.0
-        t_i[t_i < 0.0] = 0.0 
+            t_e = t_raw_e - self.Delta_syn[:,b,0].reshape(-1,1)
+            t_i = t_raw_i - self.Delta_syn[:,b,1].reshape(-1,1)
+            t_e[t_e < 0.0] = 0.0
+            t_i[t_i < 0.0] = 0.0 
 
-        tau_e = torch.exp(self.Tau_syn[:,0]).reshape(-1,1)
-        tau_i = torch.exp(self.Tau_syn[:,1]).reshape(-1,1)
-        t_e_tau = t_e / tau_e
-        t_i_tau = t_i / tau_i
-        full_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,0].reshape(-1,1)
-        full_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,1].reshape(-1,1)
+            tau_e = torch.exp(self.Tau_syn[:,b,0]).reshape(-1,1)
+            tau_i = torch.exp(self.Tau_syn[:,b,1]).reshape(-1,1)
+            t_e_tau = t_e / tau_e
+            t_i_tau = t_i / tau_i
+            part_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,b,0].reshape(-1,1)
+            part_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,b,1].reshape(-1,1)
+            full_e_kern = full_e_kern + part_e_kern
+            full_i_kern = full_i_kern + part_i_kern
 
         full_e_kern = torch.flip(full_e_kern, [1])
         full_i_kern = torch.flip(full_i_kern, [1])

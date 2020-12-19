@@ -11,18 +11,19 @@ from sklearn import metrics
 
 def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                 T_no, batch_size, iter_no, epoch_no, C_den, C_syn_e, C_syn_i, 
-                sparse_no, device, save_dir):
+                sparse_no, device, lr, save_dir):
 
     V_train = V[:T_train].to(device)
     V_test = V[T_train:T_train + T_test].to(device)
-    test_E_neural = E_neural[T_train:T_train+T_test].to(device)
-    test_I_neural = I_neural[T_train:T_train+T_test].to(device)
-    train_E_neural = E_neural[:T_train].to(device)
-    train_I_neural = I_neural[:T_train].to(device)
+    test_E_neural = E_neural[T_train:T_train+T_test].float().to(device)
+    test_I_neural = I_neural[T_train:T_train+T_test].float().to(device)
+    train_E_neural = E_neural[:T_train].float().to(device)
+    train_I_neural = I_neural[:T_train].float().to(device)
     E_no = E_neural.shape[1]
     I_no = I_neural.shape[1]
-    C_syn_e = C_syn_e.to(device)
-    C_syn_i = C_syn_i.to(device)
+    C_syn_e = C_syn_e.float().to(device)
+    C_syn_i = C_syn_i.float().to(device)
+    C_den = C_den.float().to(device)
 
     batch_no = (T_train - batch_size) * epoch_no
     train_idx = np.empty((epoch_no, T_train - batch_size))
@@ -45,8 +46,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
 
         optimizer = torch.optim.Adam([
             {'params': model.parameters()},
-            ], lr = 0.005)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
+            ], lr = lr)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3000, gamma=0.5)
     elif model_type == "alpha_cos":
         model = Alpha_Cos_GLM(C_den=C_den,
                          E_no=E_no,
@@ -59,8 +60,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
 
         optimizer = torch.optim.Adam([
             {'params': model.parameters()},
-            ], lr = 0.005)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
+            ], lr = lr)
+        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
 
     model.to(device)
 
@@ -81,9 +82,9 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
         batch_loss = torch.var(batch_V - batch_pred)
         batch_loss.backward()
         optimizer.step()
-        scheduler.step()
+        #scheduler.step()
 
-        if i%100 == 0:
+        if i%50 == 0:
             model.eval()
             test_pred, out_filters, C_syn_e, C_syn_i = model(S_e=test_E_neural,
                                                                     S_i=test_I_neural,
@@ -100,8 +101,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
 
     model.V_o.requires_grad = True
 
-    optimizer = torch.optim.Adam([model.V_o], lr=0.25)
-    scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
+    optimizer = torch.optim.Adam([model.V_o], lr=0.5)
 
     for i in range(1200):
         optimizer.zero_grad()
@@ -113,7 +113,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
         batch_loss.backward()
         optimizer.step()
         if i%100 == 0:
-            print(batch_loss)
+            print(i, batch_loss.item())
 
     model.eval()
     test_pred, out_filters, C_syn_e, C_syn_i = model(S_e=test_E_neural,
@@ -130,8 +130,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                                                     multioutput='uniform_average')
     print(test_score)
 
-    torch.save(model.state_dict(), save_dir+"alpha_model.pt")
-    np.savez(save_dir+"alpha_output.npz",
+    torch.save(model.state_dict(), save_dir+model_type+"_model.pt")
+    np.savez(save_dir+model_type+"_output.npz",
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,
