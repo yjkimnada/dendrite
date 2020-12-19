@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class Alpha_Cos_GLM(nn.Module):
+class Alpha_Hist_GLM(nn.Module):
     def __init__(self, C_den, E_no, I_no, T_no, greedy, C_syn_e, C_syn_i, device):
         super().__init__()
 
@@ -32,8 +32,8 @@ class Alpha_Cos_GLM(nn.Module):
         ### History Parameters ###
         self.hist_basis_no = 3
         
-        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.hist_basis_no)*0.05 , requires_grad=True)
-        self.hist_basis = nn.Parameter(torch.randn(self.hist_basis_no, self.T_no)*0.05 , requires_grad=True)
+        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.hist_basis_no)*0.01 , requires_grad=True)
+        self.hist_basis = nn.Parameter(torch.randn(self.hist_basis_no, self.T_no)*0.01 , requires_grad=True)
         
         ### C_syn Parameters ###
         if self.greedy == True:

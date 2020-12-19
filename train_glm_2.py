@@ -26,6 +26,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
     C_syn_e = C_syn_e.float().to(device)
     C_syn_i = C_syn_i.float().to(device)
     C_den = C_den.float().to(device)
+    sub_no = C_den.shape[0]
 
     batch_no = (T_train - batch_size) * epoch_no
     train_idx = np.empty((epoch_no, T_train - batch_size))
@@ -64,7 +65,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
             {'params': model.parameters()},
             ], lr = lr)
         #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=5000, gamma=0.5)
-    elif model_type == "alpha_free":
+    elif model_type == "alpha_hist":
         model = Alpha_Hist_GLM(C_den=C_den,
                          E_no=E_no,
                          I_no=I_no,
@@ -95,7 +96,12 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                                                                 S_i=batch_I_neural,
                                                                 temp=None,
                                                                 test=False)
+        filter_diff = out_filters[-sub_no:,1:] - out_filters[-sub_no:,:-1]
+        smooth_loss = torch.sum(filter_diff**2)
+        
         batch_loss = torch.var(batch_V - batch_pred)
+        loss = batch_loss + smooth_loss
+        
         batch_loss.backward()
         optimizer.step()
         #scheduler.step()
@@ -109,7 +115,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
             test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
                                                       y_pred=test_pred.cpu().detach().numpy(),
                                                       multioutput='uniform_average')
-            print(i, test_score, model.cos_scale.item(), model.cos_shift.item())
+            #print(i, test_score, model.cos_scale.item(), model.cos_shift.item())
+            print(i, test_score, batch_loss.item(), smooth_loss.item())
 
     model.train()
     for param in model.parameters():
