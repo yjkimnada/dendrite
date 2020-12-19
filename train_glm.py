@@ -1,5 +1,6 @@
 from models.alpha_glm import Alpha_GLM
 from models.alpha_cos_glm import Alpha_Cos_GLM
+from models.alpha_cos2_glm import Alpha_Cos2_GLM
 
 import numpy as np
 import torch
@@ -49,7 +50,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
             ], lr = lr)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=3000, gamma=0.5)
     elif model_type == "alpha_cos":
-        model = Alpha_Cos_GLM(C_den=C_den,
+        model = Alpha_Cos2_GLM(C_den=C_den,
                          E_no=E_no,
                          I_no=I_no,
                          T_no=T_no,
@@ -93,7 +94,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
             test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
                                                       y_pred=test_pred.cpu().detach().numpy(),
                                                       multioutput='uniform_average')
-            print(i, test_score)
+            print(i, test_score, torch.mean(model.Delta_syn).item(), model.cos_scale.item())
 
     model.train()
     for param in model.parameters():
