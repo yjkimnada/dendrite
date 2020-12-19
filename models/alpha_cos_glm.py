@@ -17,7 +17,9 @@ class Alpha_Cos_GLM(nn.Module):
         self.device = device
 
         ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.randn(self.sub_no,2, 2) * 0.05, requires_grad=True)
+        self.W_syn_raw = torch.rand(self.sub_no,2, 2) * 0.05
+        self.W_syn_raw[:,:,1] *= -1
+        self.W_syn = nn.Parameter(self.W_syn_raw, requires_grad=True)
         self.Tau_syn_raw = torch.arange(1.1,4,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
         self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
         self.Delta_syn = nn.Parameter(torch.zeros(self.sub_no,2, 2), requires_grad=True)
@@ -34,7 +36,7 @@ class Alpha_Cos_GLM(nn.Module):
         self.cos_basis_no = 12
         self.cos_shift = 1
         
-        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*0.01 , requires_grad=True)
+        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*(-0.005) , requires_grad=True)
         self.hist_basis = torch.empty(self.cos_basis_no, self.T_no).to(self.device)
         for i in range(self.cos_basis_no):
             phi = 1.5707963267948966*i
@@ -126,13 +128,14 @@ class Alpha_Cos_GLM(nn.Module):
         syn_in = filtered_e + filtered_i
 
         sub_out = torch.zeros(T_data+self.T_no, self.sub_no).to(self.device)
-        hist_kern = torch.matmul(self.hist_weights, self.hist_basis).unsqueeze(1)
+        hist_kern = torch.matmul(self.hist_weights, self.hist_basis)
         #######
-        hist_kern = torch.flip(hist_kern, [2])
+        hist_kern = torch.flip(hist_kern, [1])
         
         for t in range(T_data):
             sub_hist = sub_out[t:t+self.T_no,:].clone() 
-            sub_hist_in = F.conv1d(sub_hist.T.unsqueeze(0) , hist_kern, groups=self.sub_no).flatten() #(1, sub_no, 1)
+            #sub_hist_in = F.conv1d(sub_hist.T.unsqueeze(0) , hist_kern, groups=self.sub_no).flatten() #(1, sub_no, 1)
+            sub_hist_in = torch.sum(sub_hist.T * hist_kern, 1)
             
             sub_prop = torch.matmul(sub_out[self.T_no+t-1].clone()*self.W_sub , self.C_den.T)
             Y_out = torch.tanh(syn_in[t] + sub_prop + self.Theta + sub_hist_in)
@@ -143,7 +146,8 @@ class Alpha_Cos_GLM(nn.Module):
         e_kern_out = torch.flip(full_e_kern, [2]).squeeze(1)
         i_kern_out = torch.flip(full_i_kern, [2]).squeeze(1)
         #########
-        hist_kern_out = torch.flip(hist_kern, [2]).squeeze(1)
+        #hist_kern_out = torch.flip(hist_kern, [1])
+        hist_kern_out = hist_kern
         out_filters = torch.vstack((e_kern_out, i_kern_out, hist_kern_out))
 
         return final_voltage, out_filters, C_syn_e, C_syn_i

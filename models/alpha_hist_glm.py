@@ -17,7 +17,7 @@ class Alpha_Cos_GLM(nn.Module):
         self.device = device
 
         ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.randn(self.sub_no,2, 2) * 0.05, requires_grad=True)
+        self.W_syn = nn.Parameter(torch.randn(self.sub_no,2, 2) * 0.02, requires_grad=True)
         self.Tau_syn_raw = torch.arange(1.1,4,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
         self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
         self.Delta_syn = nn.Parameter(torch.zeros(self.sub_no,2, 2), requires_grad=True)
@@ -112,7 +112,7 @@ class Alpha_Cos_GLM(nn.Module):
         sub_out = torch.zeros(T_data+self.T_no, self.sub_no).to(self.device)
         hist_kern = torch.matmul(self.hist_weights, self.hist_basis) #(sub_no, T_no)
         #######
-        #hist_kern = torch.flip(hist_kern, [2])
+        #hist_kern = torch.flip(hist_kern, [1])
         
         for t in range(T_data):
             sub_hist = sub_out[t:t+self.T_no,:].clone()  #(T_no, sub_no)
@@ -127,7 +127,8 @@ class Alpha_Cos_GLM(nn.Module):
         e_kern_out = torch.flip(full_e_kern, [2]).squeeze(1)
         i_kern_out = torch.flip(full_i_kern, [2]).squeeze(1)
         #########
-        #hist_kern_out = torch.flip(hist_kern, [2]).squeeze(1)
+        #hist_kern_out = torch.flip(hist_kern, [1])
+        hist_kern_out = hist_kern
         out_filters = torch.vstack((e_kern_out, i_kern_out, hist_kern_out))
 
         return final_voltage, out_filters, C_syn_e, C_syn_i
