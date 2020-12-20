@@ -32,14 +32,13 @@ class Alpha_Cos2_GLM(nn.Module):
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
 
         ### History Parameters ###
-        #self.cos_scale = 4
-        self.cos_basis_no = 12
+        self.cos_basis_no = 15
         self.cos_shift = 1
         
-        self.cos_scale = nn.Parameter(torch.ones(1)*3 , requires_grad=True)
+        self.cos_scale = nn.Parameter(torch.ones(1)*5 , requires_grad=True)
         self.cos_shift = nn.Parameter(torch.ones(1)*1 , requires_grad=True)
         
-        self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*(-0.005) , requires_grad=True)
+        self.hist_weights = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no) , requires_grad=True)
         
 
         ### C_syn Parameters ###

@@ -17,7 +17,9 @@ class Alpha_GLM(nn.Module):
         self.device = device
 
         ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.randn(self.sub_no, 2, 2) * 0.1, requires_grad=True)
+        self.W_syn_raw = torch.rand(self.sub_no,2, 2) * 0.05
+        self.W_syn_raw[:,:,1] *= -1
+        self.W_syn = nn.Parameter(self.W_syn_raw, requires_grad=True)
         #self.Tau_syn = nn.Parameter(torch.ones(self.sub_no, 2, 2) , requires_grad=True)
         self.Tau_syn_raw = torch.arange(1.1,4,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
         self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
