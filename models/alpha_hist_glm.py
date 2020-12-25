@@ -17,22 +17,23 @@ class Alpha_Hist_GLM(nn.Module):
         self.device = device
 
         ### Synapse Parameters ###
-        self.W_syn_raw = torch.rand(self.sub_no,2, 2) * 0.02
+        self.syn_basis_no = 1
+        self.W_syn_raw = torch.rand(self.sub_no,self.syn_basis_no, 2) * 0.1
         self.W_syn_raw[:,:,1] *= -1
         self.W_syn = nn.Parameter(self.W_syn_raw, requires_grad=True)
-        self.Tau_syn_raw = torch.arange(1.1,4,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
+        self.Tau_syn_raw = torch.arange(5,10*self.syn_basis_no+10,10).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
         self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
-        self.Delta_syn = nn.Parameter(torch.zeros(self.sub_no,2, 2), requires_grad=True)
+        self.Delta_syn = nn.Parameter(torch.zeros(self.sub_no,self.syn_basis_no, 2), requires_grad=True)
         
         ### Ancestor Subunit Parameters ###
-        self.W_sub = nn.Parameter(torch.zeros(self.sub_no)*0.05 , requires_grad=True)
+        self.W_sub = nn.Parameter(torch.ones(self.sub_no)*1 , requires_grad=True)
 
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
 
         ### History Parameters ###
-        self.hist_basis_no = 3
+        self.hist_basis_no = 5
         
         self.hist_weights = nn.Parameter(torch.randn(self.sub_no, self.hist_basis_no)*0.01 , requires_grad=True)
         self.hist_basis = nn.Parameter(torch.randn(self.hist_basis_no, self.T_no)*0.01 , requires_grad=True)
@@ -76,7 +77,7 @@ class Alpha_Hist_GLM(nn.Module):
         full_e_kern = torch.zeros(self.sub_no, self.T_no).to(self.device)
         full_i_kern = torch.zeros(self.sub_no, self.T_no).to(self.device)
         
-        for b in range(2):
+        for b in range(self.syn_basis_no):
             t_raw_e = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
             t_raw_i = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
 
@@ -89,8 +90,8 @@ class Alpha_Hist_GLM(nn.Module):
             tau_i = torch.exp(self.Tau_syn[:,b,1]).reshape(-1,1)
             t_e_tau = t_e / tau_e
             t_i_tau = t_i / tau_i
-            part_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,b,0].reshape(-1,1)
-            part_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,b,1].reshape(-1,1)
+            part_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,b,0].reshape(-1,1)**2
+            part_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,b,1].reshape(-1,1)**2*(-1)
             full_e_kern = full_e_kern + part_e_kern
             full_i_kern = full_i_kern + part_i_kern
 
@@ -120,11 +121,11 @@ class Alpha_Hist_GLM(nn.Module):
             sub_hist = sub_out[t:t+self.T_no,:].clone()  #(T_no, sub_no)
             sub_hist_in = torch.sum(sub_hist.T * hist_kern, 1).flatten()
             
-            sub_prop = torch.matmul(sub_out[self.T_no+t-1].clone()*self.W_sub , self.C_den.T)
+            sub_prop = torch.matmul(sub_out[self.T_no+t-1].clone()*self.W_sub**2 , self.C_den.T)
             Y_out = torch.tanh(syn_in[t] + sub_prop + self.Theta + sub_hist_in)
             sub_out[t+self.T_no] = sub_out[t+self.T_no] + Y_out
 
-        final_voltage = sub_out[self.T_no:,0]*self.W_sub[0] + self.V_o
+        final_voltage = sub_out[self.T_no:,0]*self.W_sub[0]**2 + self.V_o
 
         e_kern_out = torch.flip(full_e_kern, [2]).squeeze(1)
         i_kern_out = torch.flip(full_i_kern, [2]).squeeze(1)

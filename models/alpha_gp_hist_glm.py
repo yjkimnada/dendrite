@@ -32,7 +32,7 @@ from gpytorch.likelihoods.noise_models import MultitaskHomoskedasticNoise
 from models.multitask_gp import MultitaskGPModel
 from models.gp_variational_elbo import VariationalELBO
 
-class GP_GLM_Likelihood( _GaussianLikelihoodBase):
+class Alpha_GP_Hist_GLM_Likelihood( _GaussianLikelihoodBase):
     def __init__(self, C_den, sub_no, N, num_tasks, device,
         rank=0,
         task_correlation_prior=None,
@@ -78,6 +78,15 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
+        
+        ### Synapse Parameters ###
+        self.syn_basis_no = 1
+        self.W_syn_raw = torch.rand(self.sub_no,self.syn_basis_no, 2) * 0.1
+        self.W_syn_raw[:,:,1] *= -1
+        self.W_syn = nn.Parameter(self.W_syn_raw, requires_grad=True)
+        self.Tau_syn_raw = torch.arange(1.1,2*self.syn_basis_no,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
+        self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
+        self.Delta_syn = nn.Parameter(torch.zeros(self.sub_no,self.syn_basis_no, 2), requires_grad=True)
     
     @property
     def noise(self):
@@ -137,10 +146,31 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
         
         T = S_e.shape[0]
         
-        F_e = all_F[:self.sub_no].unsqueeze(1)
-        F_i = all_F[self.sub_no:].unsqueeze(1)
-        flip_F_e = torch.flip(F_e, [2])
-        flip_F_i = torch.flip(F_i, [2])
+        full_e_kern = torch.zeros(self.sub_no, self.N).to(self.device)
+        full_i_kern = torch.zeros(self.sub_no, self.N).to(self.device)
+        
+        for b in range(self.syn_basis_no):
+            t_raw_e = torch.arange(self.N).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
+            t_raw_i = torch.arange(self.N).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
+
+            t_e = t_raw_e - self.Delta_syn[:,b,0].reshape(-1,1)
+            t_i = t_raw_i - self.Delta_syn[:,b,1].reshape(-1,1)
+            t_e[t_e < 0.0] = 0.0
+            t_i[t_i < 0.0] = 0.0 
+
+            tau_e = torch.exp(self.Tau_syn[:,b,0]).reshape(-1,1)
+            tau_i = torch.exp(self.Tau_syn[:,b,1]).reshape(-1,1)
+            t_e_tau = t_e / tau_e
+            t_i_tau = t_i / tau_i
+            part_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,b,0].reshape(-1,1)**2
+            part_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,b,1].reshape(-1,1)**2*(-1)
+            full_e_kern = full_e_kern + part_e_kern
+            full_i_kern = full_i_kern + part_i_kern
+
+        flip_full_e_kern = torch.flip(full_e_kern, [1])
+        flip_full_i_kern = torch.flip(full_i_kern, [1])
+        flip_full_e_kern = flip_full_e_kern.unsqueeze(1)
+        flip_full_i_kern = flip_full_i_kern.unsqueeze(1)
         
         pad_S_e = torch.zeros(T + self.N-1, self.sub_no).to(self.device)
         pad_S_i = torch.zeros(T + self.N-1, self.sub_no).to(self.device)
@@ -149,58 +179,55 @@ class GP_GLM_Likelihood( _GaussianLikelihoodBase):
         pad_S_e = pad_S_e.T.unsqueeze(0)
         pad_S_i = pad_S_i.T.unsqueeze(0)
 
-        filtered_e = F.conv1d(pad_S_e, flip_F_e, padding=0, groups=self.sub_no).squeeze(0).T
-        filtered_i = F.conv1d(pad_S_i, flip_F_i, padding=0, groups=self.sub_no).squeeze(0).T
+        filtered_e = F.conv1d(pad_S_e, flip_full_e_kern, padding=0, groups=self.sub_no).squeeze(0).T
+        filtered_i = F.conv1d(pad_S_i, flip_full_i_kern, padding=0, groups=self.sub_no).squeeze(0).T
 
         syn_in = filtered_e + filtered_i
 
         #----- Combine Subunits -----#
-
-        sub_out = torch.zeros(T, self.sub_no).to(self.device)
         
-        for s in range(self.sub_no):
-            sub_idx = -s-1
-            leaf_idx = torch.where(self.C_den[sub_idx] == 1)[0]
+        sub_out = torch.zeros(T+self.N, self.sub_no).to(self.device)
+        F_hist = all_F
+        F_hist = torch.flip(F_hist, [1])
 
-            if torch.numel(leaf_idx) == 0:
-                nonlin_out = torch.tanh(syn_in[:,sub_idx] + self.Theta[sub_idx]) # (T_data,) 
-                sub_out[:,sub_idx] = sub_out[:,sub_idx] + nonlin_out
-            else:
-                leaf_in = sub_out[:,leaf_idx] * self.W_sub[leaf_idx]**2 # (T_data,)
-                nonlin_in = syn_in[:,sub_idx] + torch.sum(leaf_in, 1) + self.Theta[sub_idx]# (T_data,)
-                nonlin_out = torch.tanh(nonlin_in)
-                sub_out[:,sub_idx] = sub_out[:,sub_idx] + nonlin_out
+        for t in range(T):
+            sub_hist = sub_out[t:t+self.N,:].clone() 
+            sub_hist_in = torch.sum(sub_hist.T * F_hist, 1).flatten()
+            
+            sub_prop = torch.matmul(sub_out[self.N+t-1].clone()*self.W_sub**2 , self.C_den.T)
+            Y_out = torch.tanh(syn_in[t] + sub_prop + self.Theta + sub_hist_in)
+            sub_out[t+self.N] = sub_out[t+self.N] + Y_out        
         
-        final_voltage = sub_out[:,0]*self.W_sub[0]**2 + self.V_o
-
+        final_voltage = sub_out[self.N:,0]*self.W_sub[0]**2 + self.V_o
         res = torch.var(target - final_voltage)
         
-        out_F_e = F_e.squeeze(1)
-        out_F_i = F_i.squeeze(1)
-        out_filters = torch.vstack((out_F_e, out_F_i))
+        out_F_e = full_e_kern.squeeze(1)
+        out_F_i = full_i_kern.squeeze(1)
+        out_F_hist = F_hist
+        out_filters = torch.vstack((out_F_e, out_F_i, out_F_hist))
         
         return res, final_voltage, out_filters
 
 
-class GP_GLM(nn.Module):
+class Alpha_GP_Hist_GLM(nn.Module):
     def __init__(self, C_den, E_no, I_no, T_no, sparse_no, batch_size, greedy, C_syn_e, C_syn_i, device):
         super().__init__()
 
-        self.C_den = C_den
+        self.C_den = C_den.float().to(device)
         self.T_no = T_no
         self.sub_no = C_den.shape[0]
         self.E_no = E_no
         self.I_no = I_no
         self.greedy = greedy
-        self.C_syn_e = C_syn_e
-        self.C_syn_i = C_syn_i
-        self.num_tasks = self.sub_no * 2
+        self.C_syn_e = C_syn_e.to(device)
+        self.C_syn_i = C_syn_i.to(device)
+        self.num_tasks = self.sub_no * 1
         self.sparse_no = sparse_no
         self.batch_size = batch_size
         self.device = device
 
         self.filter_model = MultitaskGPModel(self.num_tasks, self.sparse_no , self.T_no)
-        self.likelihood = GP_GLM_Likelihood(self.C_den, self.sub_no, self.T_no, self.num_tasks, device)
+        self.likelihood = Alpha_GP_Hist_GLM_Likelihood(self.C_den, self.sub_no, self.T_no, self.num_tasks, device)
         self.mll = VariationalELBO(self.likelihood, self.filter_model, num_data=self.batch_size)
 
         ### C_syn Parameters ###

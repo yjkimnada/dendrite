@@ -17,16 +17,17 @@ class Alpha_GLM(nn.Module):
         self.device = device
 
         ### Synapse Parameters ###
-        self.W_syn_raw = torch.rand(self.sub_no,2, 2) * 0.05
+        self.syn_basis_no = 1
+        self.W_syn_raw = torch.rand(self.sub_no,self.syn_basis_no, 2) * 0.1
         self.W_syn_raw[:,:,1] *= -1
         self.W_syn = nn.Parameter(self.W_syn_raw, requires_grad=True)
-        #self.Tau_syn = nn.Parameter(torch.ones(self.sub_no, 2, 2) , requires_grad=True)
-        self.Tau_syn_raw = torch.arange(1.1,4,2).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
+        self.Tau_syn_raw = torch.arange(5,10*self.syn_basis_no+10,10).reshape(1,-1,1).repeat(self.sub_no,1,2).float()
         self.Tau_syn = nn.Parameter(self.Tau_syn_raw, requires_grad=True)
-        self.Delta_syn = nn.Parameter(torch.rand(self.sub_no, 2, 2), requires_grad=True)
+        self.Delta_syn = nn.Parameter(torch.zeros(self.sub_no,self.syn_basis_no, 2), requires_grad=True)
+        
         
         ### Ancestor Subunit Parameters ###
-        self.W_sub = nn.Parameter(torch.rand(self.sub_no) , requires_grad=True)
+        self.W_sub = nn.Parameter(torch.ones(self.sub_no)*1 , requires_grad=True)
 
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
@@ -36,6 +37,8 @@ class Alpha_GLM(nn.Module):
         if self.greedy == True:
             self.C_syn_e_logit = nn.Parameter(torch.ones(self.sub_no, self.E_no), requires_grad=True)
             self.C_syn_i_logit = nn.Parameter(torch.ones(self.sub_no, self.I_no), requires_grad=True)
+        
+        
     
     def forward(self, S_e, S_i, temp, test):
         T_data = S_e.shape[0] 
@@ -70,7 +73,7 @@ class Alpha_GLM(nn.Module):
         full_e_kern = torch.zeros(self.sub_no, self.T_no).to(self.device)
         full_i_kern = torch.zeros(self.sub_no, self.T_no).to(self.device)
         
-        for b in range(2):
+        for b in range(self.syn_basis_no):
             t_raw_e = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
             t_raw_i = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
 
@@ -79,12 +82,12 @@ class Alpha_GLM(nn.Module):
             t_e[t_e < 0.0] = 0.0
             t_i[t_i < 0.0] = 0.0 
 
-            tau_e = torch.exp(self.Tau_syn[:,b,0]).reshape(-1,1)
-            tau_i = torch.exp(self.Tau_syn[:,b,1]).reshape(-1,1)
+            tau_e = self.Tau_syn[:,b,0].reshape(-1,1)**2
+            tau_i = self.Tau_syn[:,b,1].reshape(-1,1)**2
             t_e_tau = t_e / tau_e
             t_i_tau = t_i / tau_i
-            part_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,b,0].reshape(-1,1)
-            part_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,b,1].reshape(-1,1)
+            part_e_kern = t_e_tau * torch.exp(-t_e_tau) * self.W_syn[:,b,0].reshape(-1,1)**2
+            part_i_kern = t_i_tau * torch.exp(-t_i_tau) * self.W_syn[:,b,1].reshape(-1,1)**2*(-1)
             full_e_kern = full_e_kern + part_e_kern
             full_i_kern = full_i_kern + part_i_kern
 
@@ -115,12 +118,12 @@ class Alpha_GLM(nn.Module):
                 nonlin_out = torch.tanh(syn_in[:,sub_idx] + self.Theta[sub_idx]) # (T_data,) 
                 sub_out[:,sub_idx] = sub_out[:,sub_idx] + nonlin_out
             else:
-                leaf_in = sub_out[:,leaf_idx] * torch.exp(self.W_sub[leaf_idx]) # (T_data,)
+                leaf_in = sub_out[:,leaf_idx] * self.W_sub[leaf_idx]**2 # (T_data,)
                 nonlin_in = syn_in[:,sub_idx] + torch.sum(leaf_in, 1) + self.Theta[sub_idx] # (T_data,)
                 nonlin_out = torch.tanh(nonlin_in)
                 sub_out[:,sub_idx] = sub_out[:,sub_idx] + nonlin_out
         
-        final_voltage = sub_out[:,0]*torch.exp(self.W_sub[0]) + self.V_o
+        final_voltage = sub_out[:,0]*self.W_sub[0]**2 + self.V_o
 
         e_kern_out = torch.flip(full_e_kern, [2]).squeeze(1)
         i_kern_out = torch.flip(full_i_kern, [2]).squeeze(1)

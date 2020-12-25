@@ -29,8 +29,8 @@ from gpytorch.likelihoods import Likelihood, _GaussianLikelihoodBase
 from gpytorch.utils.warnings import OldVersionWarning
 from gpytorch.likelihoods.noise_models import MultitaskHomoskedasticNoise
 
-from multitask_gp import MultitaskGPModel
-from gp_variational_elbo import VariationalELBO
+from models.multitask_gp import MultitaskGPModel
+from models.gp_variational_elbo import VariationalELBO
 
 class GP_Hist_GLM_Likelihood( _GaussianLikelihoodBase):
     def __init__(self, C_den, sub_no, N, num_tasks, device,
@@ -73,7 +73,7 @@ class GP_Hist_GLM_Likelihood( _GaussianLikelihoodBase):
         self.scale = nn.Parameter(torch.ones(self.num_tasks) , requires_grad=True)
         
         ### Between Subunit Parameters ###
-        self.W_log = nn.Parameter(torch.zeros(self.sub_no) , requires_grad=True) # POSITIVE
+        self.W_sub = nn.Parameter(torch.ones(self.sub_no) , requires_grad=True) # POSITIVE
 
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
@@ -157,20 +157,26 @@ class GP_Hist_GLM_Likelihood( _GaussianLikelihoodBase):
         #----- Combine Subunits -----#
         
         sub_out = torch.zeros(T+self.N, self.sub_no).to(self.device)
-        F_hist = all_F[self.sub_no*2:].unsqueeze(1)
+        F_hist = all_F[self.sub_no*2:]
+        F_hist = torch.flip(F_hist, [1])
 
         for t in range(T):
             sub_hist = sub_out[t:t+self.N,:].clone() 
-            sub_hist_in = F.conv1d(sub_hist.T.unsqueeze(0) , F_hist, groups=self.sub_no).flatten() #(1, sub_no, 1)
+            sub_hist_in = torch.sum(sub_hist.T * F_hist, 1).flatten()
             
-            sub_prop = torch.matmul(sub_out[self.N+t-1].clone()*torch.exp(self.W_log) , self.C_den.T)
+            sub_prop = torch.matmul(sub_out[self.N+t-1].clone()*self.W_sub**2 , self.C_den.T)
             Y_out = torch.tanh(syn_in[t] + sub_prop + self.Theta + sub_hist_in)
             sub_out[t+self.N] = sub_out[t+self.N] + Y_out        
         
-        final_voltage = sub_out[self.N:,0]*torch.exp(self.W_log[0]) + self.V_o
+        final_voltage = sub_out[self.N:,0]*self.W_sub[0]**2 + self.V_o
         res = torch.var(target - final_voltage)
         
-        return res, final_voltage, all_F
+        out_F_e = F_e.squeeze(1)
+        out_F_i = F_i.squeeze(1)
+        out_F_hist = F_hist
+        out_filters = torch.vstack((out_F_e, out_F_i, out_F_hist))
+        
+        return res, final_voltage, out_filters
 
 
 class GP_Hist_GLM(nn.Module):

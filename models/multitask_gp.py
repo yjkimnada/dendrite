@@ -4,7 +4,10 @@ import gpytorch
 
 class MultitaskGPModel(gpytorch.models.ApproximateGP):
     def __init__(self, num_tasks, M, N):
-        inducing_points = torch.rand(num_tasks, M, 1)
+        #inducing_points = torch.rand(num_tasks, M, 1)
+        
+        #inducing_points = torch.arange(0,N-1,N//M).float().reshape(1,-1).repeat(num_tasks,1).unsqueeze(2)
+        inducing_points = torch.arange(0,M,1).float().reshape(1,-1).repeat(num_tasks,1).unsqueeze(2)
 
         variational_distribution = gpytorch.variational.CholeskyVariationalDistribution(
             inducing_points.size(-2), batch_shape=torch.Size([num_tasks])
