@@ -51,25 +51,12 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
             ], lr = lr)
         scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=9999999, gamma=0.5)
     
+    
 
     model.to(device)
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
-    bce_criterion = nn.BCELoss()
-
     
-    model.eval()
-    #V_pred, Z_pred, out_filters = model.test_forward(train_E_neural,
-                                                    #train_I_neural)
-    
-    V_pred, Z_pred, out_filters = model.train_forward(train_E_neural,
-                                                     train_I_neural,
-                                                     Z_train)
-    
-    
-    avg_diff = torch.mean(V_train - V_pred).item()
-    old_V_o = model.V_o.item()
-    new_V_o = nn.Parameter(torch.ones(1).to(device) * (avg_diff + old_V_o))
-    model.V_o = new_V_o
+    bce_criterion = nn.BCELoss(reduction="none")
     
     
     for i in tnrange(iter_no):
@@ -86,10 +73,14 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
                                                          batch_I_neural,
                                                          batch_Z)
         
+        loss_weights = torch.ones(batch_size).to(device)
+        Z_idx = torch.where(batch_Z == 1)[0]
+        loss_weights[Z_idx] *= 3
+        
         
         var_loss = torch.var(batch_V - V_pred)
-        #var_loss = torch.mean((batch_V - V_pred)**2)
-        bce_loss = bce_criterion(Z_pred, batch_Z)
+        bce_loss = torch.mean(bce_criterion(Z_pred, batch_Z) * loss_weights)
+        
         
         loss = var_loss + bce_loss
             
@@ -100,32 +91,37 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         train_score = metrics.explained_variance_score(y_true=batch_V.cpu().detach().numpy(),
                                                       y_pred=V_pred.cpu().detach().numpy(),
                                                       multioutput='uniform_average')
-
+        """
         if (i%100 == 0) or (i == iter_no-1):
             model.eval()
             
-            #V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
-                                                            #test_I_neural)
+            V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
+                                                            test_I_neural)
             
-            V_pred, Z_pred, out_filters = model.train_forward(test_E_neural,
-                                                             test_I_neural,
-                                                             Z_test)
+            #V_pred, Z_pred, out_filters = model.train_forward(test_E_neural,
+                                                             #test_I_neural,
+                                                             #Z_test)
             
             
             test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
                                                       y_pred=V_pred.cpu().detach().numpy(),
                                                       multioutput='uniform_average')
+            
             test_var = torch.var(V_test - V_pred)
-            test_bce = bce_criterion(Z_pred ,Z_test)
-            print(i, test_score, test_var.item(), test_bce.item())
+            test_bce = torch.mean(bce_criterion(Z_pred ,Z_test))
+            #print("###############")
+            print(i, test_score, test_bce.item(), torch.sum(Z_test).item(), torch.sum(Z_pred).item())
+            #print(torch.sum(out_filters[-8:], 1))
+            #print("###############")
+        """
 
     model.eval()
-    #V_pred, Z_pred, out_filters = model.test_forward(train_E_neural,
-                                                    #train_I_neural)
+    V_pred, Z_pred, out_filters = model.test_forward(train_E_neural,
+                                                    train_I_neural)
     
-    V_pred, Z_pred, out_filters = model.train_forward(train_E_neural,
-                                                     train_I_neural,
-                                                     Z_train)
+    #V_pred, Z_pred, out_filters = model.train_forward(train_E_neural,
+                                                     #train_I_neural,
+                                                     #Z_train)
     
     
     avg_diff = torch.mean(V_train - V_pred).item()
@@ -135,12 +131,12 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
     
         
     model.eval()
-    #V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
-                                                    #test_I_neural)
+    V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
+                                                    test_I_neural)
         
-    V_pred, Z_pred, out_filters = model.train_forward(test_E_neural,
-                                                     test_I_neural,
-                                                     Z_test)
+    #V_pred, Z_pred, out_filters = model.train_forward(test_E_neural,
+                                                     #test_I_neural,
+                                                     #Z_test)
     
     test_pred = V_pred.cpu().detach().numpy()
     #C_syn_e = C_syn_e.cpu().detach().numpy()
@@ -152,6 +148,24 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
                                                     multioutput='uniform_average')
     print(test_score)
     print(np.mean((V_test.cpu().detach().numpy() - test_pred)**2))
+    print(torch.where(Z_test == 1)[0])
+    print(torch.where(Z_pred == 1)[0])
+    
+    good_no = 0
+    bad_no = 0
+    
+    for x in torch.where(Z_pred == 1)[0]:
+        close_count = 0
+        for y in torch.where(Z_test == 1)[0]:
+            if torch.abs(x-y) <= 20:
+                close_count += 1
+        if close_count > 0:
+            good_no += 1
+        else:
+            bad_no += 1
+            
+    print(good_no, bad_no)
+    
 
     torch.save(model.state_dict(), save_dir+model_type+"_"+"sub"+str(sub_no)+"_model.pt")
     np.savez(save_dir+model_type+"_"+"sub"+str(sub_no)+"_output.npz",
