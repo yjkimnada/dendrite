@@ -1,4 +1,5 @@
 from models.alpha_rootspike_glm import Alpha_RootSpike_GLM
+from models.alpha_rootspike_2nonlin_glm import Alpha_RootSpike_2Nonlin_GLM
 
 import numpy as np
 import torch
@@ -49,7 +50,21 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         optimizer = torch.optim.Adam([
             {'params': model.parameters()},
             ], lr = lr)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=9999999, gamma=0.5)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
+    elif model_type == "alpha_rootspike_2nonlin":
+        model = Alpha_RootSpike_2Nonlin_GLM(C_den=C_den,
+                         E_no=E_no,
+                         I_no=I_no,
+                         T_no=T_no,
+                         greedy=False,
+                         C_syn_e=C_syn_e,
+                         C_syn_i=C_syn_i,
+                         device = device)
+
+        optimizer = torch.optim.Adam([
+            {'params': model.parameters()},
+            ], lr = lr)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
     
     
 

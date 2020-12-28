@@ -2,8 +2,9 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
+
 class Alpha_RootSpike_GLM(nn.Module):
-    def __init__(self, C_den, E_no, I_no, T_no, greedy, C_syn_e, C_syn_i, device):
+    def __init__(self, C_den, E_no, I_no, T_no, device):
         super().__init__()
 
         self.C_den = C_den
@@ -11,9 +12,6 @@ class Alpha_RootSpike_GLM(nn.Module):
         self.sub_no = C_den.shape[0]
         self.E_no = E_no
         self.I_no = I_no
-        self.greedy = greedy
-        self.C_syn_e = C_syn_e
-        self.C_syn_i = C_syn_i
         self.device = device
 
         ### Non-Spike Synapse Parameters ###
@@ -31,6 +29,7 @@ class Alpha_RootSpike_GLM(nn.Module):
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
         self.Theta_ns = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
         self.Theta_s = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
+        
         
         ### Cosine Basis ###
         self.cos_basis_no = 24
@@ -57,14 +56,58 @@ class Alpha_RootSpike_GLM(nn.Module):
         ### Spiking Parameters ###
         self.hist_s_weights = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
         self.hist_ns_weights = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
+
+        ### C_syn Parameters ###
+        self.C_syn_e_ns_raw = nn.Parameter(torch.ones(self.sub_no, self.E_no) , requires_grad=True)
+        self.C_syn_i_ns_raw = nn.Parameter(torch.ones(self.sub_no, self.I_no) , requires_grad=True)
+        self.C_syn_e_s_raw = nn.Parameter(torch.ones(self.sub_no, self.E_no) , requires_grad=True)
+        self.C_syn_i_s_raw = nn.Parameter(torch.ones(self.sub_no, self.I_no) , requires_grad=True)
         
     
-    def spike_convolve(self, S_e, S_i):
+    def spike_convolve(self, S_e, S_i, temp, test):
         T_data = S_e.shape[0]
         
-        syn_e = torch.matmul(S_e, self.C_syn_e.T)
-        syn_i = torch.matmul(S_i, self.C_syn_i.T)
-        
+        ### Make C_syn's ###
+        if test == False:
+            
+            eps = 1e-7
+            u_e_ns = torch.rand_like(self.C_syn_e_ns_raw)
+            u_i_ns = torch.rand_like(self.C_syn_i_ns_raw)
+            u_e_s = torch.rand_like(self.C_syn_e_s_raw)
+            u_i_s = torch.rand_like(self.C_syn_i_s_raw)
+
+            g_e_ns = -torch.log(-torch.log(u_e_ns + eps) + eps)
+            g_i_ns = -torch.log(-torch.log(u_i_ns + eps) + eps)
+            g_e_s = -torch.log(-torch.log(u_e_s + eps) + eps)
+            g_i_s = -torch.log(-torch.log(u_i_s + eps) + eps)
+
+            C_syn_e_ns = F.softmax((self.C_syn_e_ns_raw + g_e_ns) / temp, dim=0)
+            C_syn_i_ns = F.softmax((self.C_syn_i_ns_raw + g_i_ns) / temp, dim=0)
+            C_syn_e_s = F.softmax((self.C_syn_e_s_raw + g_e_s) / temp, dim=0)
+            C_syn_i_s = F.softmax((self.C_syn_i_s_raw + g_i_s) / temp, dim=0)
+            
+            
+        elif test == True:
+            C_syn_e_ns = torch.zeros(self.sub_no, self.E_no).to(self.device)
+            C_syn_i_ns = torch.zeros(self.sub_no, self.I_no).to(self.device)
+            C_syn_e_s = torch.zeros(self.sub_no, self.E_no).to(self.device)
+            C_syn_i_s = torch.zeros(self.sub_no, self.I_no).to(self.device)
+            for e in range(self.E_no):
+                max_e_ns = torch.argmax(self.C_syn_e_ns_raw[:,e])
+                max_e_s = torch.argmax(self.C_syn_e_s_raw[:,e])
+                C_syn_e_ns[max_e_ns, e] = 1
+                C_syn_e_s[max_e_s, e] = 1
+            for i in range(self.I_no):
+                max_i_ns = torch.argmax(self.C_syn_i_ns_raw[:,i])
+                max_i_s = torch.argmax(self.C_syn_i_s_raw[:,i])
+                C_syn_i_ns[max_i_ns, i] = 1
+                C_syn_i_s[max_i_s, i] = 1
+        ######
+
+        syn_e_ns = torch.matmul(S_e, C_syn_e_ns.T)
+        syn_i_ns = torch.matmul(S_i, C_syn_i_ns.T)
+        syn_e_s = torch.matmul(S_e, C_syn_e_s.T)
+        syn_i_s = torch.matmul(S_i, C_syn_i_s.T)
         
         t_raw = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
         tau_e_ns = self.Tau_syn_ns[:,0].reshape(-1,1)**2
@@ -92,10 +135,10 @@ class Alpha_RootSpike_GLM(nn.Module):
         pad_syn_i_ns = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
         pad_syn_e_s = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
         pad_syn_i_s = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
-        pad_syn_e_ns[-T_data:] = pad_syn_e_ns[-T_data:] + syn_e
-        pad_syn_i_ns[-T_data:] = pad_syn_i_ns[-T_data:] + syn_i
-        pad_syn_e_s[-T_data:] = pad_syn_e_s[-T_data:] + syn_e
-        pad_syn_i_s[-T_data:] = pad_syn_i_s[-T_data:] + syn_i
+        pad_syn_e_ns[-T_data:] = pad_syn_e_ns[-T_data:] + syn_e_ns
+        pad_syn_i_ns[-T_data:] = pad_syn_i_ns[-T_data:] + syn_i_ns
+        pad_syn_e_s[-T_data:] = pad_syn_e_s[-T_data:] + syn_e_s
+        pad_syn_i_s[-T_data:] = pad_syn_i_s[-T_data:] + syn_i_s
         pad_syn_e_ns = pad_syn_e_ns.T.reshape(1,self.sub_no,-1)
         pad_syn_i_ns = pad_syn_i_ns.T.reshape(1,self.sub_no,-1)
         pad_syn_e_s = pad_syn_e_s.T.reshape(1,self.sub_no,-1)
@@ -113,16 +156,18 @@ class Alpha_RootSpike_GLM(nn.Module):
                                    torch.flip(i_kern_ns.squeeze(1), [1]),
                                    torch.flip(e_kern_s.squeeze(1), [1]),
                                    torch.flip(i_kern_s.squeeze(1), [1])))
+        C_syn_e = torch.hstack((C_syn_e_ns, C_syn_i_ns))
+        C_syn_i = torch.hstack((C_syn_e_s, C_syn_i_s))
         
-        return syn_ns, syn_s, out_filters
+        return syn_ns, syn_s, out_filters, C_syn_e, C_syn_i
         
     
     
-    def train_forward(self, S_e, S_i, Z):
+    def train_forward(self, S_e, S_i, Z, temp):
         
         T_data = S_e.shape[0] 
 
-        syn_ns, syn_s, syn_filters = self.spike_convolve(S_e, S_i)
+        syn_ns, syn_s, syn_filters, C_syn_e, C_syn_i = self.spike_convolve(S_e, S_i, temp, test=False)
 
         ns_out = torch.zeros(T_data , self.sub_no).to(self.device) #0th column empty!
         s_out = torch.zeros(T_data , self.sub_no).to(self.device) #0th column empty! 
@@ -159,11 +204,9 @@ class Alpha_RootSpike_GLM(nn.Module):
         root_s_in = hist_s_filt + syn_s[:,0] + torch.sum(s_out[:,root_leaf_idx]*self.W_sub_s[root_leaf_idx]**2 , 1) + self.Theta_s[0]
         s_out[:,0] = s_out[:,0] + torch.sigmoid(root_s_in)
         
-        ######
         hist_ns_filt = F.conv1d(pad_Z, hist_ns_kern).flatten()[:-1]
         ns_in = hist_ns_filt + syn_ns[:,0] + torch.sum(ns_out[:,root_leaf_idx]*self.W_sub_ns[root_leaf_idx]**2 , 1) + self.Theta_ns[0]
         ns_out[:,0] = torch.tanh(ns_in)
-        ######
         
         final_V = ns_out[:,0]*self.W_sub_ns[0]**2 + self.V_o
         final_Z = s_out[:,0]
@@ -173,12 +216,12 @@ class Alpha_RootSpike_GLM(nn.Module):
         
         out_filters = torch.vstack((syn_filters, hist_ns_out, hist_s_out))
         
-        return final_V, final_Z, out_filters
+        return final_V, final_Z, out_filters, C_syn_e, C_syn_i
     
     def test_forward(self, S_e, S_i):
         T_data = S_e.shape[0] 
 
-        syn_ns, syn_s, syn_filters = self.spike_convolve(S_e, S_i)
+        syn_ns, syn_s, syn_filters, C_syn_e, C_syn_i = self.spike_convolve(S_e, S_i, temp=None, test=True)
 
         ns_out = torch.zeros(T_data , self.sub_no).to(self.device) #0th column empty!
         s_out = torch.zeros(T_data , self.sub_no).to(self.device) #0th column empty!
@@ -198,7 +241,7 @@ class Alpha_RootSpike_GLM(nn.Module):
             else:
                 s_in = syn_s[:,sub_idx] + torch.sum(s_out[:,leaf_idx]*self.W_sub_s[leaf_idx]**2 , 1) + self.Theta_s[sub_idx]
                 ns_in = syn_ns[:,sub_idx] + torch.sum(ns_out[:,leaf_idx]*self.W_sub_ns[leaf_idx]**2 , 1) + self.Theta_ns[sub_idx]
-                s_out[:,sub_idx] = s_out[:,sub_idx] + F.leaky_relu(s_in)
+                s_out[:,sub_idx] = s_out[:,sub_idx] + F.leaky_relu(s_in,1)
                 ns_out[:,sub_idx] = ns_out[:,sub_idx] + torch.tanh(ns_in)
                 
         hist_s_kern = torch.matmul(self.hist_s_weights, self.cos_basis)
@@ -228,6 +271,6 @@ class Alpha_RootSpike_GLM(nn.Module):
         
         out_filters = torch.vstack((syn_filters, hist_ns_out, hist_s_out))
         
-        return final_V, final_Z, out_filters
+        return final_V, final_Z, out_filters, C_syn_e, C_syn_i
         
         

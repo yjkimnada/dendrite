@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class Alpha_RootSpike_GLM(nn.Module):
+class Alpha_RootSpike_2Nonlin_GLM(nn.Module):
     def __init__(self, C_den, E_no, I_no, T_no, greedy, C_syn_e, C_syn_i, device):
         super().__init__()
 
@@ -52,7 +52,8 @@ class Alpha_RootSpike_GLM(nn.Module):
             
             
         ### Spike Synapse Parameters ###
-        self.W_syn_s = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
+        self.W_syn_s_1 = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
+        self.W_syn_s_2 = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
         
         ### Spiking Parameters ###
         self.hist_s_weights = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
@@ -80,13 +81,17 @@ class Alpha_RootSpike_GLM(nn.Module):
         e_kern_ns = t_e_tau_ns * torch.exp(-t_e_tau_ns) * self.W_syn_ns[:,0].reshape(-1,1)**2
         i_kern_ns = t_i_tau_ns * torch.exp(-t_i_tau_ns) * self.W_syn_ns[:,1].reshape(-1,1)**2*(-1)
         
-        e_kern_s = torch.matmul(self.W_syn_s[:,:,0], self.cos_basis)
-        i_kern_s = torch.matmul(self.W_syn_s[:,:,1], self.cos_basis)
+        e_kern_s_1 = torch.matmul(self.W_syn_s_1[:,:,0], self.cos_basis)
+        i_kern_s_1 = torch.matmul(self.W_syn_s_1[:,:,1], self.cos_basis)
+        e_kern_s_2 = torch.matmul(self.W_syn_s_2[:,:,0], self.cos_basis)
+        i_kern_s_2 = torch.matmul(self.W_syn_s_2[:,:,1], self.cos_basis)
         
         e_kern_ns = torch.flip(e_kern_ns, [1]).unsqueeze(1)
         i_kern_ns = torch.flip(i_kern_ns, [1]).unsqueeze(1)
-        e_kern_s = torch.flip(e_kern_s, [1]).unsqueeze(1)
-        i_kern_s = torch.flip(i_kern_s, [1]).unsqueeze(1)
+        e_kern_s_1 = torch.flip(e_kern_s_1, [1]).unsqueeze(1)
+        i_kern_s_1 = torch.flip(i_kern_s_1, [1]).unsqueeze(1)
+        e_kern_s_2 = torch.flip(e_kern_s_2, [1]).unsqueeze(1)
+        i_kern_s_2 = torch.flip(i_kern_s_2, [1]).unsqueeze(1)
         
         pad_syn_e_ns = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
         pad_syn_i_ns = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
@@ -103,16 +108,29 @@ class Alpha_RootSpike_GLM(nn.Module):
         
         filtered_e_ns = F.conv1d(pad_syn_e_ns, e_kern_ns, groups=self.sub_no).squeeze(0).T
         filtered_i_ns = F.conv1d(pad_syn_i_ns, i_kern_ns, groups=self.sub_no).squeeze(0).T
-        filtered_e_s = F.conv1d(pad_syn_e_s, e_kern_s, groups=self.sub_no).squeeze(0).T
-        filtered_i_s = F.conv1d(pad_syn_i_s, i_kern_s, groups=self.sub_no).squeeze(0).T
+        filtered_e_s = F.conv1d(pad_syn_e_s, e_kern_s_1, groups=self.sub_no).squeeze(0).T
+        filtered_i_s = F.conv1d(pad_syn_i_s, i_kern_s_1, groups=self.sub_no).squeeze(0).T
+        
+        pad_syn_e_s_2 = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
+        pad_syn_i_s_2 = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
+        pad_syn_e_s_2[-T_data:] = pad_syn_e_s_2[-T_data:] + filtered_e_s
+        pad_syn_i_s_2[-T_data:] = pad_syn_i_s_2[-T_data:] + filtered_i_s
+        pad_syn_e_s_2 = pad_syn_e_s_2.T.reshape(1, self.sub_no, -1)
+        pad_syn_i_s_2 = pad_syn_i_s_2.T.reshape(1, self.sub_no, -1)
+        filtered_e_s_2 = F.conv1d(pad_syn_e_s_2, e_kern_s_2, groups=self.sub_no).squeeze(0).T
+        filtered_i_s_2 = F.conv1d(pad_syn_i_s_2, i_kern_s_2, groups=self.sub_no).squeeze(0).T
+        
+        
         
         syn_ns = filtered_e_ns + filtered_i_ns
-        syn_s = filtered_e_s + filtered_i_s
+        syn_s = filtered_e_s_2 + filtered_i_s_2
         
         out_filters = torch.vstack((torch.flip(e_kern_ns.squeeze(1), [1]),
                                    torch.flip(i_kern_ns.squeeze(1), [1]),
-                                   torch.flip(e_kern_s.squeeze(1), [1]),
-                                   torch.flip(i_kern_s.squeeze(1), [1])))
+                                   torch.flip(e_kern_s_1.squeeze(1), [1]),
+                                   torch.flip(i_kern_s_1.squeeze(1), [1]),
+                                   torch.flip(e_kern_s_2.squeeze(1), [1]),
+                                   torch.flip(i_kern_s_2.squeeze(1), [1])))
         
         return syn_ns, syn_s, out_filters
         
@@ -198,7 +216,7 @@ class Alpha_RootSpike_GLM(nn.Module):
             else:
                 s_in = syn_s[:,sub_idx] + torch.sum(s_out[:,leaf_idx]*self.W_sub_s[leaf_idx]**2 , 1) + self.Theta_s[sub_idx]
                 ns_in = syn_ns[:,sub_idx] + torch.sum(ns_out[:,leaf_idx]*self.W_sub_ns[leaf_idx]**2 , 1) + self.Theta_ns[sub_idx]
-                s_out[:,sub_idx] = s_out[:,sub_idx] + F.leaky_relu(s_in)
+                s_out[:,sub_idx] = s_out[:,sub_idx] + F.leaky_relu(s_in,1)
                 ns_out[:,sub_idx] = ns_out[:,sub_idx] + torch.tanh(ns_in)
                 
         hist_s_kern = torch.matmul(self.hist_s_weights, self.cos_basis)
