@@ -1,5 +1,5 @@
 from models.alpha_rootspike_glm import Alpha_RootSpike_GLM
-from models.alpha_rootspike_2nonlin_glm import Alpha_RootSpike_2Nonlin_GLM
+#from models.alpha_rootspike_2nonlin_glm import Alpha_RootSpike_2Nonlin_GLM
 
 import numpy as np
 import torch
@@ -50,7 +50,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         optimizer = torch.optim.Adam([
             {'params': model.parameters()},
             ], lr = lr)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
+        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
     elif model_type == "alpha_rootspike_2nonlin":
         model = Alpha_RootSpike_2Nonlin_GLM(C_den=C_den,
                          E_no=E_no,
@@ -73,6 +73,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
     
     bce_criterion = nn.BCELoss(reduction="none")
     
+    loss_factor = 1
     
     for i in tnrange(iter_no):
         model.train()
@@ -90,7 +91,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         
         loss_weights = torch.ones(batch_size).to(device)
         Z_idx = torch.where(batch_Z == 1)[0]
-        loss_weights[Z_idx] *= 3
+        loss_weights[Z_idx] *= loss_factor
         
         
         var_loss = torch.var(batch_V - V_pred)
@@ -101,21 +102,13 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
             
         loss.backward()
         optimizer.step()
-        scheduler.step()
+        #scheduler.step()
         
-        train_score = metrics.explained_variance_score(y_true=batch_V.cpu().detach().numpy(),
-                                                      y_pred=V_pred.cpu().detach().numpy(),
-                                                      multioutput='uniform_average')
-        
-        if (i%250 == 0) or (i == iter_no-1):
+        if (i%2500 == 2499) or (i == iter_no-1):
             model.eval()
             
-            V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
+            V_pred, Z_pred, L_pred, out_filters = model.test_forward(test_E_neural,
                                                             test_I_neural)
-            
-            #V_pred, Z_pred, out_filters = model.train_forward(test_E_neural,
-                                                             #test_I_neural,
-                                                             #Z_test)
             
             
             test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
@@ -123,21 +116,13 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
                                                       multioutput='uniform_average')
             
             test_var = torch.var(V_test - V_pred)
-            test_bce = torch.mean(bce_criterion(Z_pred ,Z_test))
-            #print("###############")
+            test_bce = torch.mean(bce_criterion(L_pred ,Z_test))
             print(i, test_score, test_bce.item(), torch.sum(Z_test).item(), torch.sum(Z_pred).item())
-            #print(torch.sum(out_filters[-8:], 1))
-            #print("###############")
         
 
     model.eval()
-    V_pred, Z_pred, out_filters = model.test_forward(train_E_neural,
+    V_pred, Z_pred, L_pred, out_filters = model.test_forward(train_E_neural,
                                                     train_I_neural)
-    
-    #V_pred, Z_pred, out_filters = model.train_forward(train_E_neural,
-                                                     #train_I_neural,
-                                                     #Z_train)
-    
     
     avg_diff = torch.mean(V_train - V_pred).item()
     old_V_o = model.V_o.item()
@@ -146,25 +131,22 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
     
         
     model.eval()
-    V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
+    V_pred, Z_pred, L_pred, out_filters = model.test_forward(test_E_neural,
                                                     test_I_neural)
-        
-    #V_pred, Z_pred, out_filters = model.train_forward(test_E_neural,
-                                                     #test_I_neural,
-                                                     #Z_test)
+    
     
     test_pred = V_pred.cpu().detach().numpy()
     #C_syn_e = C_syn_e.cpu().detach().numpy()
     #C_syn_i = C_syn_i.cpu().detach().numpy()
     out_filters = out_filters.cpu().detach().numpy()
+    out_spikes = Z_pred.cpu().detach().numpy()
+    out_probs = L_pred.cpu().detach().numpy()
 
     test_score = metrics.explained_variance_score(y_true=V_test.cpu().detach().numpy(),
                                                     y_pred=test_pred,
                                                     multioutput='uniform_average')
     print(test_score)
     print(np.mean((V_test.cpu().detach().numpy() - test_pred)**2))
-    print(torch.where(Z_test == 1)[0])
-    print(torch.where(Z_pred == 1)[0])
     
     good_no = 0
     bad_no = 0
@@ -172,7 +154,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
     for x in torch.where(Z_pred == 1)[0]:
         close_count = 0
         for y in torch.where(Z_test == 1)[0]:
-            if torch.abs(x-y) <= 20:
+            if torch.abs(x-y) <= 10:
                 close_count += 1
         if close_count > 0:
             good_no += 1
@@ -185,8 +167,8 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
     torch.save(model.state_dict(), save_dir+model_type+"_"+"sub"+str(sub_no)+"_model.pt")
     np.savez(save_dir+model_type+"_"+"sub"+str(sub_no)+"_output.npz",
                     test = test_pred,
-                    #C_syn_e = C_syn_e,
-                    #C_syn_i = C_syn_i,
+                    spikes = out_spikes,
+                    probs = out_probs,
                     filters = out_filters)
 
 
