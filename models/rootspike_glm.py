@@ -38,10 +38,6 @@ class RootSpike_GLM(nn.Module):
         self.W_syn_s = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
         #self.W_syn_s_e = nn.Parameter(torch.randn(self.sub_no, self.T_no)*0.1 , requires_grad=True)
         #self.W_syn_s_i = nn.Parameter(torch.randn(self.sub_no, self.T_no)*0.1 , requires_grad=True)
-        
-        #self.W_syn_s = nn.Parameter(torch.rand(self.sub_no,2)*0.1 , requires_grad=True)
-        #self.Tau_s = nn.Parameter(torch.ones(self.sub_no,2) , requires_grad=True)
-        #self.Delta_s = nn.Parameter(torch.zeros(self.sub_no,2) , requires_grad=True)
 
         ### Spiking Parameters ###
         self.hist_s_weights = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
@@ -65,16 +61,6 @@ class RootSpike_GLM(nn.Module):
         
         e_kern_s = torch.matmul(self.W_syn_s[:,:,0], self.cos_basis)
         i_kern_s = torch.matmul(self.W_syn_s[:,:,1], self.cos_basis)
-        
-        #t_raw = torch.arange(self.T_no).to(self.device).reshape(1,-1).repeat(self.sub_no,1)
-        #t_e = t_raw - self.Delta_s[:,0].reshape(-1,1)**2
-        #t_i = t_raw - self.Delta_s[:,1].reshape(-1,1)**2
-        
-        #t_e_tau = t_e / self.Tau_s[:,0].reshape(-1,1)**2
-        #t_i_tau = t_i / self.Tau_s[:,1].reshape(-1,1)**2
-        
-        #e_kern_s = t_e_tau * torch.exp(-t_e_tau) * self.W_syn_s[:,0].reshape(-1,1)**2
-        #i_kern_s = t_i_tau * torch.exp(-t_i_tau) * self.W_syn_s[:,1].reshape(-1,1)**2*(-1)
         
         ########
         
@@ -157,11 +143,11 @@ class RootSpike_GLM(nn.Module):
         #hist_s_kern = self.hist_s
         hist_s_kern = torch.flip(hist_s_kern, [0])
         root_leaf_idx = torch.where(self.C_den[0] == 1)[0]
-        zero = torch.tensor([0.0]).to(self.device)
+
         for t in range(T_data):
             hist_s_filt = torch.sum(hist_s_kern * root_s_out[t:t+self.T_no].clone())
             root_s_in = hist_s_filt + syn_s[t,0] + torch.sum(s_out[t,root_leaf_idx]*self.W_sub_s[root_leaf_idx]**2) + self.Theta_s[0]
-            root_s_out[t+self.T_no] = root_s_out[t+self.T_no] + torch.heaviside(root_s_in, zero)
+            root_s_out[t+self.T_no] = root_s_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_s_in))
 
         
         final_Z = root_s_out[self.T_no:]

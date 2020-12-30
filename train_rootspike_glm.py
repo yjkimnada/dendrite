@@ -106,8 +106,8 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         train_score = metrics.explained_variance_score(y_true=batch_V.cpu().detach().numpy(),
                                                       y_pred=V_pred.cpu().detach().numpy(),
                                                       multioutput='uniform_average')
-        """
-        if (i%100 == 0) or (i == iter_no-1):
+        
+        if (i%250 == 0) or (i == iter_no-1):
             model.eval()
             
             V_pred, Z_pred, out_filters = model.test_forward(test_E_neural,
@@ -128,7 +128,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
             print(i, test_score, test_bce.item(), torch.sum(Z_test).item(), torch.sum(Z_pred).item())
             #print(torch.sum(out_filters[-8:], 1))
             #print("###############")
-        """
+        
 
     model.eval()
     V_pred, Z_pred, out_filters = model.test_forward(train_E_neural,

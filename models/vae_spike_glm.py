@@ -1,9 +1,9 @@
 import torch
-from torch import nn
-from torch.nn import functional as F
+import torch.nn as nn
+import torch.nn.functional as F
 
 
-class Spike_GLM(nn.Module):
+class VAE_Spike_GLM(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
         super().__init__()
 
@@ -31,19 +31,15 @@ class Spike_GLM(nn.Module):
             basis[raw_cos < xmin] = 0.0
             basis[raw_cos > xmax] = 0.0 
             self.cos_basis[i] = self.cos_basis[i] + basis
-        
 
         ### Synapse Parameters ###
         self.W_syn = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no, 2)*0.01 , requires_grad=True)
-        #self.W_syn = nn.Parameter(torch.randn(self.sub_no, self.T_no, 2)*0.01 , requires_grad=True)
 
         ### Spiking History Parameters ###
         self.W_hist = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*0.01 , requires_grad=True)
-        #self.W_hist = nn.Parameter(torch.randn(self.sub_no, self.T_no)*0.01 , requires_grad=True)
-        
+
         ### Spike Propagation Parametesr ###
         self.W_prop = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*0.01 , requires_grad=True)
-        #self.W_prop = nn.Parameter(torch.randn(self.sub_no, self.T_no)*0.01 , requires_grad=True)
 
         ### Subunit Output Parameters ###
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
@@ -56,10 +52,7 @@ class Spike_GLM(nn.Module):
 
         e_kern = torch.matmul(self.W_syn[:,:,0], self.cos_basis)
         i_kern = torch.matmul(self.W_syn[:,:,1], self.cos_basis)
-        
-        #e_kern = self.W_syn[:,:,0]
-        #i_kern = self.W_syn[:,:,1]
-        
+
         e_kern = torch.flip(e_kern, [1]).unsqueeze(1)
         i_kern = torch.flip(i_kern, [1]).unsqueeze(1)
 
@@ -79,7 +72,7 @@ class Spike_GLM(nn.Module):
                                    torch.flip(i_kern.squeeze(1), [1])))
         
         return syn, out_filters
-    
+
     def train_forward(self, S_e, S_i, Z):
         T_data = S_e.shape[0]
         syn, syn_filters = self.spike_convolve(S_e, S_i)
@@ -90,10 +83,7 @@ class Spike_GLM(nn.Module):
 
         hist_kern = torch.matmul(self.W_hist, self.cos_basis)
         prop_kern = torch.matmul(self.W_prop, self.cos_basis)
-        
-        #hist_kern = self.W_hist
-        #prop_kern = self.W_prop
-        
+
         hist_kern = torch.flip(hist_kern, [1]).unsqueeze(1)
         prop_kern = torch.flip(prop_kern, [1]).unsqueeze(1)
 
@@ -119,17 +109,14 @@ class Spike_GLM(nn.Module):
                                 torch.flip(prop_kern.squeeze(1), [1])))
 
         return Z_pred, out_filters
-
+    
     def test_forward(self, S_e, S_i):
         T_data = S_e.shape[0]
         syn, syn_filters = self.spike_convolve(S_e, S_i)
 
         hist_kern = torch.matmul(self.W_hist, self.cos_basis)
         prop_kern = torch.matmul(self.W_prop, self.cos_basis)
-        
-        #hist_kern = self.W_hist
-        #prop_kern = self.W_prop
-        
+
         hist_kern = torch.flip(hist_kern, [1])
         prop_kern = torch.flip(prop_kern, [1])
 
@@ -142,7 +129,6 @@ class Spike_GLM(nn.Module):
             Z_prop_filt = torch.matmul(self.C_den, Z_prop_filt_raw)
 
             sub_in = syn[t] + self.Theta + Z_hist_filt + Z_prop_filt
-            #Z_pred[t+self.T_no,:] = Z_pred[t+self.T_no,:] + torch.heaviside(torch.sigmoid(sub_in)-0.5, torch.tensor([1.0]).to(self.device))
             Z_pred[t+self.T_no,:] = Z_pred[t+self.T_no,:] + torch.bernoulli(torch.sigmoid(sub_in))
 
         out_filters = torch.vstack((syn_filters,
@@ -162,7 +148,6 @@ class GLM_Encoder(nn.Module):
         self.C_syn_i = C_syn_i
         self.device = device
 
-        
         ### Cosine Basis ###
         self.cos_basis_no = 13
         self.cos_shift = 1
@@ -180,17 +165,7 @@ class GLM_Encoder(nn.Module):
             basis[raw_cos < xmin] = 0.0
             basis[raw_cos > xmax] = 0.0 
             self.cos_basis[i] = self.cos_basis[i] + basis
-        
-        
-        ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.randn(self.sub_no-1, self.cos_basis_no, 2)*0.01 , requires_grad=True)
-        #self.W_syn = nn.Parameter(torch.randn(self.sub_no-1, self.T_no, 2)*0.01, requires_grad=True)
 
-        ### Spiking History Parameters ###
-        self.W_hist = nn.Parameter(torch.randn(self.sub_no-1, self.cos_basis_no)*0.01 , requires_grad=True)
-        #self.W_hist = nn.Parameter(torch.randn(self.sub_no-1, self.T_no)*0.01 , requires_grad=True)
-
-        
         ### Observed Basis ###
         self.obs_basis_no = 13
         self.obs_shift = 1
@@ -222,10 +197,14 @@ class GLM_Encoder(nn.Module):
                 self.obs_basis[i*2-1, self.T_no:] = pos_basis
                 self.obs_basis[i*2, :self.T_no+1] = neg_basis
         
+        ### Synapse Parameters ###
+        self.W_syn = nn.Parameter(torch.randn(self.sub_no-1, self.cos_basis_no, 2)*0.01 , requires_grad=True)
+
+        ### Spiking History Parameters ###
+        #self.W_hist = nn.Parameter(torch.randn(self.sub_no-1, self.cos_basis_no)*0.01 , requires_grad=True)
 
         ### Z_observed Parameters ###
         self.W_obs = nn.Parameter(torch.zeros(self.sub_no-1, self.obs_basis_no*2-1) , requires_grad=True)
-        #self.W_obs = nn.Parameter(torch.zeros(self.sub_no-1, self.T_no*2+1) , requires_grad=True)
 
         ### Output Parameters ###
         self.Theta = nn.Parameter(torch.zeros(self.sub_no-1) , requires_grad=True)
@@ -238,10 +217,7 @@ class GLM_Encoder(nn.Module):
         
         e_kern = torch.matmul(self.W_syn[:,:,0], self.cos_basis)
         i_kern = torch.matmul(self.W_syn[:,:,1], self.cos_basis)
-        
-        #e_kern = self.W_syn[:,:,0]
-        #i_kern = self.W_syn[:,:,1]
-        
+
         e_kern = torch.flip(e_kern, [1]).unsqueeze(1)
         i_kern = torch.flip(i_kern, [1]).unsqueeze(1)
         
@@ -258,48 +234,15 @@ class GLM_Encoder(nn.Module):
         syn = filtered_e + filtered_i
         
         return syn
-    
-    def train_forward(self, S_e, S_i, Z_obs, Z_hid):
-        T_data = S_e.shape[0]
-        syn = self.spike_convolve(S_e, S_i)
-        
-        hist_kern = torch.matmul(self.W_hist, self.cos_basis)
-        obs_kern = torch.matmul(self.W_obs, self.obs_basis)
-        
-        #hist_kern = self.W_hist
-        #obs_kern = self.W_obs
-        
-        hist_kern = torch.flip(hist_kern, [1]).unsqueeze(1)
-        obs_kern = torch.flip(obs_kern, [1]).unsqueeze(1)
-        
-        
-        Z_obs_pad = torch.zeros(T_data + self.T_no*2).to(self.device)
-        Z_obs_pad[self.T_no:-self.T_no] = Z_obs_pad[self.T_no:-self.T_no] + Z_obs
-        Z_obs_pad = Z_obs_pad.reshape(1,1,-1)
-        Z_obs_filt = F.conv1d(Z_obs_pad, obs_kern).squeeze(0).T
-        
-        Z_hid_pad = torch.zeros(T_data + self.T_no, self.sub_no - 1).to(self.device)
-        Z_hid_pad[-T_data:] = Z_hid_pad[-T_data:] + Z_hid
-        Z_hid_pad = Z_hid_pad.T.unsqueeze(0)
-        Z_hid_filt = F.conv1d(Z_hid_pad, hist_kern, groups=self.sub_no-1).squeeze(0).T[:-1]
-        
-        Z_hid_enc = torch.sigmoid(syn + Z_hid_filt + Z_obs_filt + self.Theta)
-        
-        return Z_hid_enc
-        
-    
-    
-    def test_forward(self, S_e, S_i, Z_obs):
+
+    def forward(self, S_e, S_i, Z_obs, temp):
         T_data = S_e.shape[0]
         syn = self.spike_convolve(S_e, S_i)
 
-        hist_kern = torch.matmul(self.W_hist, self.cos_basis)
+        #hist_kern = torch.matmul(self.W_hist, self.cos_basis)
         obs_kern = torch.matmul(self.W_obs, self.obs_basis)
-        
-        #hist_kern = self.W_hist
-        #obs_kern = self.W_obs
-        
-        hist_kern = torch.flip(hist_kern, [1])
+
+        #hist_kern = torch.flip(hist_kern, [1])
         obs_kern = torch.flip(obs_kern, [1]).unsqueeze(1)
 
         Z_obs_pad = torch.zeros(T_data + self.T_no*2).to(self.device)
@@ -307,19 +250,76 @@ class GLM_Encoder(nn.Module):
         Z_obs_pad = Z_obs_pad.reshape(1,1,-1)
         Z_obs_filt = F.conv1d(Z_obs_pad, obs_kern).squeeze(0).T
 
+        L_hid = torch.zeros(T_data, self.sub_no-1, 2).to(self.device)
+        L_hid[:,:,0] = L_hid[:,:,0] + syn+Z_obs_filt+self.Theta
+        
+        eps=1e-8
+        u = torch.rand_like(L_hid)
+        g = - torch.log(- torch.log(u + eps) + eps) 
+        Z_hid_raw = F.softmax((L_hid+g) / temp, dim=2)
+        Z_hid = Z_hid_raw[:,:,0]
+        
+        
+        #L_hid = torch.sigmoid(syn + Z_obs_filt + self.Theta)
+        #alpha = L_hid / (1-L_hid)
+        #u = torch.rand_like(alpha)
+        #l = torch.log(u +1e-8) - torch.log(1-u +1e-8)
+        #Z_hid = 1/(1+torch.exp(-(torch.log(alpha +1e-8)+l)/temp))
+        
+        #print(-(torch.log(alpha +1e-8)+l)/temp)
+        #print(self.W_syn, self.W_obs)
+        #print(Z_obs_filt, syn)
+        #print(L_hid, Z_hid)
+        
+        
+        """
+        
         Z_hid = torch.zeros(T_data + self.T_no, self.sub_no-1).to(self.device)
-        L_hid = torch.zeros(T_data + self.T_no, self.sub_no-1).to(self.device)
-
         for t in range(T_data):
             Z_hist = Z_hid[t:t+self.T_no,:].clone()
             Z_hist_filt = torch.sum(Z_hist.T * hist_kern , 1)
 
             sub_in = syn[t] + self.Theta + Z_hist_filt + Z_obs_filt[t]
-            #Z_hid[t+self.T_no,:] = Z_hid[t+self.T_no,:] + torch.heaviside(torch.sigmoid(sub_in)-0.5, torch.tensor([1.0]).to(self.device))
-            Z_hid[t+self.T_no,:] = Z_hid[t+self.T_no,:] + torch.bernoulli(torch.sigmoid(sub_in))
-            L_hid[t+self.T_no,:] = L_hid[t+self.T_no,:] + torch.sigmoid(sub_in)
-
+            sub_prob = torch.sigmoid(sub_in)
+            alpha = sub_prob / (1-sub_prob)
+            u = torch.rand_like(alpha)
+            l = torch.log(u) - torch.log(1-u)
+            x = 1/(1+torch.exp(-(torch.log(alpha)+l)/temp))
+            Z_hid[t+self.T_no,:] = Z_hid[t+self.T_no,:] + x
+        """
+     
+        #return Z_hid[self.T_no:]
+        return Z_hid, torch.sigmoid(L_hid[:,:,0])
+    
+class NN_Encoder(nn.Module):
+    def __init__(self, T_no, out_no, layer_no, device):
+        super().__init__()
         
-        return Z_hid[self.T_no:], L_hid[self.T_no:]
-
-
+        self.T_no = T_no
+        self.out_no = out_no
+        self.layer_no = layer_no
+        
+        modules = []
+        
+        for i in range(self.layer_no):
+            if i == 0:
+                modules.append(nn.Conv1d(in_channels=1,
+                                        out_channels=self.out_no,
+                                        kernel_size = 2*self.T_no+1,
+                                        padding=self.T_no))
+                modules.append(nn.LeakyReLU())
+            if i == self.layer_no - 1:
+                modules.append(nn.Conv1d(in_channels=self.out_no,
+                                         out_channels=self.out_no,
+                                        kernel_size = 2*self.T_no+1,
+                                        padding=self.T_no))
+            else:
+                modules.append(nn.Conv1d(in_channels=self.out_no,
+                                         out_channels=self.out_no,
+                                        kernel_size = 2*self.T_no+1,
+                                        padding=self.T_no))
+                modules.append(nn.LeakyReLU())
+                
+        self.conv_list = nn.Sequential(*modules)
+        
+        
