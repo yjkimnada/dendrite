@@ -74,9 +74,9 @@ class RootSpike_Greedy_Search:
                         I_no=self.I_no,
                         T_no=self.T_no,
                         device = self.device)
-        loss_factor = 3
+        loss_factor = 1
 
-        optimizer = torch.optim.Adam(model.parameters() , lr= 0.005)
+        optimizer = torch.optim.Adam(model.parameters() , lr= 0.001)
         #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
 
 
@@ -101,10 +101,9 @@ class RootSpike_Greedy_Search:
             model.train()
             optimizer.zero_grad()
 
-            if (i%500 == 0) & (temp_count < 13):
+            if (i%500 == 0) & (temp_count < 14):
                 temp = temp_list[temp_count]
                 temp_count += 1
-                
                 
             batch_idx = train_idx[i].long()
             batch_E_neural = self.train_E_neural[batch_idx : batch_idx+self.batch_size]

@@ -38,37 +38,35 @@ class Greedy_Search:
 
     def search(self):
         curr_C_den = torch.zeros((1, 1)).to(self.device)
-        final_exp_var = torch.zeros((self.max_sub-1)).to(self.device)
+        final_scores = torch.zeros((self.max_sub-1)).to(self.device)
 
         for i in tnrange(self.max_sub - 1):
             sub_no = i+2
-            
-
-            var_exp_array = torch.empty((i+1)).to(self.device)
+            score_array = torch.empty((i+1)).to(self.device)
 
             for j in range(i+1):
                 new_C_den = torch.zeros((i+2,i+2)).to(self.device)
                 new_C_den[:-1,:-1] = curr_C_den
                 new_C_den[j, -1] = 1
 
-                var_exp = self.train(new_C_den)
-                var_exp_array[j] = var_exp
+                score = self.train(new_C_den)
+                score_array[j] = score
 
-            best_idx = torch.argmax(var_exp_array)
+            best_idx = torch.argmin(score_array)
 
             curr_C_den_new = torch.zeros((i+2,i+2)).to(self.device)
             curr_C_den_new[:-1,:-1] = curr_C_den
             curr_C_den_new[best_idx, -1] = 1
             curr_C_den = curr_C_den_new
-            final_exp_var[i] = var_exp_array[best_idx]
+            final_scores[i] = score_array[best_idx]
             
             for j in range(i+1):
                 if j != best_idx:
                     os.remove(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(j)+"_model.pt")
                     os.remove(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(j)+"_output.npz")
 
-            print(i+2, "SUB: ", var_exp_array)
-            print("CUMULATIVE: ", final_exp_var[:i+1])
+            print(i+2, "SUB: ", score_array.cpu().detach().numpy())
+            print("CUMULATIVE: ", final_scores[:i+1].cpu().detach().numpy())
         
 
     def train(self, C_den):
@@ -83,8 +81,8 @@ class Greedy_Search:
 
             optimizer = torch.optim.Adam([
                 {'params': model.parameters()},
-                ], lr = 0.005)
-            scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
+                ], lr = 0.002)
+            #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
 
 
         model.to(self.device)
@@ -108,7 +106,7 @@ class Greedy_Search:
             model.train()
             optimizer.zero_grad()
 
-            if (i%500 == 0) & (temp_count < 13):
+            if (i%500 == 0) & (temp_count < 14):
                 temp = temp_list[temp_count]
                 temp_count += 1
                 
@@ -126,7 +124,7 @@ class Greedy_Search:
 
             loss_weights = torch.ones(self.batch_size).to(self.device)
             Z_idx = torch.where(batch_Z == 1)[0]
-            loss_weights[Z_idx] *= 3
+            loss_weights[Z_idx] *= 1
 
             var_loss = torch.var(batch_V - V_pred)
             bce_loss = torch.mean(bce_criterion(Z_pred, batch_Z) * loss_weights)
@@ -134,10 +132,10 @@ class Greedy_Search:
             loss = var_loss + bce_loss
             loss.backward()
             optimizer.step()
-            scheduler.step()
+            #scheduler.step()
 
         model.eval()
-        V_pred, Z_pred, out_filters, C_syn_e, C_syn_i = model.test_forward(self.train_E_neural,
+        V_pred, Z_pred, L_pred, out_filters, C_syn_e, C_syn_i = model.test_forward(self.train_E_neural,
                                                         self.train_I_neural)
 
         avg_diff = torch.mean(self.V_train - V_pred).item()
@@ -146,25 +144,32 @@ class Greedy_Search:
         model.V_o = new_V_o
 
         model.eval()
-        V_pred, Z_pred, out_filters, C_syn_e, C_syn_i = model.test_forward(self.test_E_neural,
+        V_pred, Z_pred, L_pred, out_filters, C_syn_e, C_syn_i = model.test_forward(self.test_E_neural,
                                                     self.test_I_neural)
 
         test_pred = V_pred.cpu().detach().numpy()
         C_syn_e = C_syn_e.cpu().detach().numpy()
         C_syn_i = C_syn_i.cpu().detach().numpy()
         out_filters = out_filters.cpu().detach().numpy()
+        out_spikes = Z_pred.cpu().detach().numpy()
+        out_probs = L_pred.cpu().detach().numpy()
             
-        test_score = metrics.explained_variance_score(y_true=self.V_test.cpu().detach().numpy(),
+        test_var_exp = metrics.explained_variance_score(y_true=self.V_test.cpu().detach().numpy(),
                                                     y_pred=test_pred)
+        test_mse = torch.mean((V_pred - self.V_test)**2).item()
+        test_gauss = 0.5*test_mse
+        
+        test_bce = torch.mean(bce_criterion(L_pred, self.Z_test)).item()
+        nll = test_bce + test_gauss
 
-        print(test_score)
+        print("VAR EXP:",np.round(test_var_exp,5), "GAUSS:",np.round(test_gauss,5), "BCE:", np.round(test_bce,5))
 
         good_no = 0
         bad_no = 0
         for x in torch.where(Z_pred == 1)[0]:
             close_count = 0
             for y in torch.where(self.Z_test == 1)[0]:
-                if torch.abs(x-y) <= 20:
+                if torch.abs(x-y) <= 5:
                     close_count += 1
             if close_count > 0:
                 good_no += 1
@@ -177,9 +182,11 @@ class Greedy_Search:
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,
-                    filters = out_filters)
+                    filters = out_filters,
+                    spikes = out_spikes,
+                    probs = out_probs)
 
-        return(test_score)
+        return(nll)
 
 
 
