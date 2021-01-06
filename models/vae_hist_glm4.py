@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class VAE_Hist_GLM(nn.Module):
+class VAE_Hist_GLM4(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
         super().__init__()
 
@@ -35,7 +35,16 @@ class VAE_Hist_GLM(nn.Module):
         
             
         ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
+        self.plex_no = 2
+        #self.W_syn_1 = nn.Parameter(torch.zeros(self.sub_no*self.plex_no, 2, self.cos_basis_no) , requires_grad=True)
+        #self.W_syn_2 = nn.Parameter(torch.zeros(self.sub_no*self.plex_no, self.plex_no, self.cos_basis_no) , requires_grad=True)
+        #self.W_syn_3 = nn.Parameter(torch.zeros(self.sub_no*self.plex_no, self.plex_no, self.cos_basis_no) , requires_grad=True)
+        #self.W_syn_4 = nn.Parameter(torch.zeros(self.sub_no, self.plex_no, self.cos_basis_no) , requires_grad=True)
+        
+        self.W_syn_1 = nn.Parameter(torch.randn(self.sub_no*self.plex_no, 2, self.T_no)*0.01, requires_grad=True)
+        self.W_syn_2 = nn.Parameter(torch.randn(self.sub_no*self.plex_no, self.plex_no, self.T_no)*0.01, requires_grad=True)
+        #self.W_syn_3 = nn.Parameter(torch.randn(self.sub_no*self.plex_no, self.plex_no, self.T_no)*0.01, requires_grad=True)
+        self.W_syn_4 = nn.Parameter(torch.randn(self.sub_no, self.plex_no, self.T_no)*0.01, requires_grad=True)
 
         ### History Parameters ###
         self.W_hist = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
@@ -52,76 +61,67 @@ class VAE_Hist_GLM(nn.Module):
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
-        
-        self.root_weight_1 = nn.Parameter(torch.randn(5), requires_grad=True)
-        self.root_weight_2 = nn.Parameter(torch.randn(5), requires_grad=True)
-        
-        ### C_syn ###
-        #self.C_syn_e_raw = nn.Parameter(torch.ones(self.sub_no, 2000) , requires_grad=True)
-        #self.C_syn_i_raw = nn.Parameter(torch.ones(self.sub_no, 200) , requires_grad=True)
 
-    def spike_convolve(self, S_e, S_i, test):
+    def spike_convolve(self, S_e, S_i):
         T_data = S_e.shape[0]
         
-        """
-        if test == False:
-            eps = 1e-8
-            temp=0.025
-            u_e = torch.rand_like(self.C_syn_e_raw)
-            u_i = torch.rand_like(self.C_syn_i_raw)
-            g_e = - torch.log(- torch.log(u_e + eps) + eps)
-            g_i = - torch.log(- torch.log(u_i + eps) + eps)
-
-            C_syn_e = F.softmax((self.C_syn_e_raw + g_e) / temp, dim=0)
-            C_syn_i = F.softmax((self.C_syn_i_raw + g_i) / temp, dim=0)
-            
-        elif test == True:
-            C_syn_e = torch.zeros(self.sub_no, 2000).to(self.device)
-            C_syn_i = torch.zeros(self.sub_no, 200).to(self.device)
-            
-            for i in range(2000):
-                max_idx = torch.argmax(self.C_syn_e_raw[:,i])
-                C_syn_e[max_idx,i] = 1
-            for i in range(200):
-                max_idx = torch.argmax(self.C_syn_i_raw[:,i])
-                C_syn_i[max_idx,i] = 1
-
-        syn_e = torch.matmul(S_e, C_syn_e.T)
-        syn_i = torch.matmul(S_i, C_syn_i.T)
-        """
-        
+        ### DEPTH ####
         syn_e = torch.matmul(S_e, self.C_syn_e.T)
         syn_i = torch.matmul(S_i, self.C_syn_i.T)
         
-        full_e_kern = torch.matmul(self.W_syn[:,:,0], self.cos_basis)
-        full_i_kern = torch.matmul(self.W_syn[:,:,1], self.cos_basis)
+        #conv1_weight = torch.matmul(self.W_syn_1, self.cos_basis)
+        #conv2_weight = torch.matmul(self.W_syn_2, self.cos_basis)
+        #conv3_weight = torch.matmul(self.W_syn_3, self.cos_basis)
+        #conv4_weight = torch.matmul(self.W_syn_4, self.cos_basis)
+        #conv1_weight = torch.flip(conv1_weight, [2])
+        #conv2_weight = torch.flip(conv2_weight, [2])
+        #conv3_weight = torch.flip(conv3_weight, [2])  
+        #conv4_weight = torch.flip(conv4_weight, [2]) 
         
-        full_e_kern = torch.flip(full_e_kern, [1])
-        full_i_kern = torch.flip(full_i_kern, [1])
-        full_e_kern = full_e_kern.unsqueeze(1)
-        full_i_kern = full_i_kern.unsqueeze(1)
-
-        pad_syn_e = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
-        pad_syn_i = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
-        pad_syn_e[-T_data:] = pad_syn_e[-T_data:] + syn_e
-        pad_syn_i[-T_data:] = pad_syn_i[-T_data:] + syn_i
-        pad_syn_e = pad_syn_e.T.reshape(1,self.sub_no,-1)
-        pad_syn_i = pad_syn_i.T.reshape(1,self.sub_no,-1)
+        conv1_weight = self.W_syn_1
+        conv2_weight = self.W_syn_2
+        #conv3_weight = self.W_syn_3
+        conv4_weight = self.W_syn_4
+            
+        in_pad_1 = torch.zeros(T_data + self.T_no - 1, self.sub_no*2).to(self.device)
+        for i in range(self.sub_no):
+            in_pad_1[-T_data:,i*2] = in_pad_1[-T_data:,i*2] + syn_e[:,i]
+            in_pad_1[-T_data:,i*2+1] = in_pad_1[-T_data:,i*2+1] + syn_i[:,i]
+        in_pad_1 = in_pad_1.T.unsqueeze(0)
+            
+        conv1 = F.leaky_relu(F.conv1d(in_pad_1, conv1_weight, groups=self.sub_no).squeeze(0).T)
         
-        filtered_e = F.conv1d(pad_syn_e, full_e_kern, padding=0, groups=self.sub_no).squeeze(0).T
-        filtered_i = F.conv1d(pad_syn_i, full_i_kern, padding=0,  groups=self.sub_no).squeeze(0).T
- 
-        syn = filtered_e + filtered_i
+        in_pad_2 = torch.zeros(T_data + self.T_no - 1, self.sub_no*self.plex_no).to(self.device)
+        in_pad_2[-T_data:,:] = in_pad_2[-T_data:,:] + conv1
+        in_pad_2 = in_pad_2.T.unsqueeze(0)
         
-        out_filters = torch.vstack((torch.flip(full_e_kern.squeeze(1), [1]),
-                                   torch.flip(full_i_kern.squeeze(1), [1]),
-                                   ))
+        conv2 = F.leaky_relu(F.conv1d(in_pad_2, conv2_weight, groups=self.sub_no).squeeze(0).T)
+        
+        #in_pad_3 = torch.zeros(T_data + self.T_no - 1, self.sub_no*self.plex_no).to(self.device)
+        #in_pad_3[-T_data:,:] = in_pad_3[-T_data:,:] + conv2
+        #in_pad_3 = in_pad_3.T.unsqueeze(0)
+        
+        #conv3 = F.conv1d(in_pad_3, conv3_weight, groups=self.sub_no).squeeze(0).T
+        
+        in_pad_4 = torch.zeros(T_data + self.T_no - 1, self.sub_no*self.plex_no).to(self.device)
+        #in_pad_4[-T_data:,:] = in_pad_4[-T_data:,:] + conv3
+        in_pad_4[-T_data:,:] = in_pad_4[-T_data:,:] + conv2
+        in_pad_4 = in_pad_4.T.unsqueeze(0)
+        
+        conv4 = F.conv1d(in_pad_4, conv4_weight, groups=self.sub_no).squeeze(0).T
+        
+        syn = conv4
+        
+        out_filters = torch.vstack((conv1_weight.reshape(-1,self.T_no), 
+                                    conv2_weight.reshape(-1,self.T_no), 
+                                    #conv3_weight.reshape(-1,self.T_no), 
+                                    conv4_weight.reshape(-1,self.T_no)))
         
         return syn, out_filters
 
     def train_forward(self, S_e, S_i, Z):
         T_data = S_e.shape[0]
-        syn, syn_filters = self.spike_convolve(S_e, S_i, test=False)
+        syn, syn_filters = self.spike_convolve(S_e, S_i)
         ns_out = torch.zeros(T_data , self.sub_no).to(self.device)
 
         pad_Z = torch.zeros(T_data + self.T_no).to(self.device)
@@ -146,28 +146,27 @@ class VAE_Hist_GLM(nn.Module):
         
         root_leaf_idx = torch.where(self.C_den[0] == 1)[0]
         root_in = hist_filt + syn[:,0] + torch.sum(ns_out[:,root_leaf_idx] * self.W_sub[root_leaf_idx]**2, 1) + self.Theta[0]
-        root_in_1 = F.leaky_relu(torch.matmul(root_in.reshape(-1,1), self.root_weight_1.reshape(1,-1)))
-        root_in_2 = torch.matmul(root_in_1, self.root_weight_2)
-        
-        ns_out[:,0] = ns_out[:,0] + torch.sigmoid(root_in_2)
+        ns_out[:,0] = ns_out[:,0] + torch.sigmoid(root_in)
         
         final_Z = ns_out[:,0]
         
         t = torch.arange(self.T_no).to(self.device)
         t_tau = t / self.Tau_spk**2
         spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        #spk_kern = torch.matmul(self.W_spk, self.cos_basis)
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(pad_Z, spk_kern).flatten()[:-1]
         
         final_V = spk_filt + self.V_o
-        hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
+        #hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
+        #out_filters = torch.vstack((syn_filters, hist_out))
         out_filters = syn_filters
 
         return final_V, final_Z, out_filters
 
     def test_forward(self, S_e, S_i):
         T_data = S_e.shape[0]
-        syn, syn_filters = self.spike_convolve(S_e, S_i, test=True)
+        syn, syn_filters = self.spike_convolve(S_e, S_i)
         ns_out = torch.zeros(T_data , self.sub_no).to(self.device)
         Z_out = torch.zeros(T_data+self.T_no).to(self.device)
         spk_out = torch.zeros(T_data+self.T_no).to(self.device)
@@ -193,11 +192,8 @@ class VAE_Hist_GLM(nn.Module):
             hist_filt = torch.sum(spk_out[t:t+self.T_no].clone() * hist_kern)
             root_prop = torch.sum(ns_out[t,root_leaf_idx] * self.W_sub[root_leaf_idx]**2)
             root_in = syn[t,0] + hist_filt + root_prop + self.Theta[0]
-            root_in_1 = F.leaky_relu(root_in * self.root_weight_1)
-            root_in_2 = torch.matmul(root_in_1, self.root_weight_2)
-            
-            Z_out[t+self.T_no] = Z_out[t+self.T_no] + torch.sigmoid(root_in_2)
-            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_in_2))
+            Z_out[t+self.T_no] = Z_out[t+self.T_no] + torch.sigmoid(root_in)
+            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_in))
         
         final_Z = Z_out[self.T_no:]
         final_spk = spk_out[self.T_no:]
@@ -205,11 +201,13 @@ class VAE_Hist_GLM(nn.Module):
         t = torch.arange(self.T_no).to(self.device)
         t_tau = t / self.Tau_spk**2
         spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        #spk_kern = torch.matmul(self.W_spk, self.cos_basis)
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(spk_out.reshape(1,1,-1), spk_kern).flatten()[:-1]
         final_V = spk_filt + self.V_o
         
-        hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
+        #hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
+        #out_filters = torch.vstack((syn_filters, hist_out))
         out_filters = syn_filters
 
         return final_V, final_Z, out_filters
@@ -295,18 +293,16 @@ class NN_Encoder(nn.Module):
         filtered_i = F.conv1d(pad_syn_i, i_kern, groups=self.sub_no).squeeze(0).T
 
         raw_syn = filtered_e + filtered_i 
-        #syn = torch.sum(raw_syn, 1)
+        syn = torch.sum(raw_syn, 1)
 
         nn = self.conv_list(V.reshape(1,1,-1)).flatten()
 
-        #Z_out = torch.sigmoid(nn+syn+self.Theta)
-        Z_out = torch.sigmoid(nn)
+        Z_out = torch.sigmoid(nn+syn+self.Theta)
         spk_out_raw = torch.zeros(T_data, 2).to(self.device)
-        #spk_out_raw[:,0] = spk_out_raw[:,0] + nn+syn+self.Theta
-        spk_out_raw[:,0] = spk_out_raw[:,0] + nn
+        spk_out_raw[:,0] = spk_out_raw[:,0] + nn+syn+self.Theta
         
         eps = 1e-8
-        temp=0.025
+        temp=0.1
         u = torch.rand_like(spk_out_raw)
         g = - torch.log(- torch.log(u + eps) + eps)
 

@@ -81,7 +81,7 @@ class RootSpike_Greedy_Search:
 
 
         model.to(self.device)
-        bce_criterion = nn.BCELoss(reduction="none")
+        bce_criterion = nn.BCELoss(reduction="mean")
 
         temp_list = [0.5, 0.4, 0.3, 0.2, 0.1,
                     0.09, 0.08, 0.07, 0.06,
@@ -118,8 +118,13 @@ class RootSpike_Greedy_Search:
             loss_weights = torch.ones(self.batch_size).to(self.device)
             Z_idx = torch.where(batch_Z == 1)[0]
             loss_weights[Z_idx] *= loss_factor
+            
+            smooth_loss = 0.1*(torch.mean((C_syn_e[1:]-C_syn_e[:-1])**2) + torch.mean((C_syn_i[1:]-C_syn_i[:-1])**2))
+            bce_loss = bce_criterion(Z_pred, batch_Z)
 
-            loss = torch.mean(bce_criterion(Z_pred, batch_Z) * loss_weights)
+            loss = bce_loss + smooth_loss
+            
+            print(bce_loss.item(), smooth_loss.item())
 
             loss.backward()
             optimizer.step()
@@ -153,8 +158,8 @@ class RootSpike_Greedy_Search:
                 bad_no += 1
         print("GOOD: ", good_no, "BAD: ", bad_no)
 
-        torch.save(model.state_dict(), self.save_dir+"sub"+str(sub_no)+"-"+str(new_idx)+"_model.pt")
-        np.savez(self.save_dir+"sub"+str(sub_no)+"-"+str(new_idx)+"_output.npz",
+        torch.save(model.state_dict(), self.save_dir+"sub"+str(sub_no)+"-"+str(new_idx)+"_smooth_model.pt")
+        np.savez(self.save_dir+"sub"+str(sub_no)+"-"+str(new_idx)+"_smooth_output.npz",
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,

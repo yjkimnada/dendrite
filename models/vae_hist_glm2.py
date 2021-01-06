@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class VAE_Hist_GLM(nn.Module):
+class VAE_Hist_GLM2(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
         super().__init__()
 
@@ -35,7 +35,35 @@ class VAE_Hist_GLM(nn.Module):
         
             
         ### Synapse Parameters ###
-        self.W_syn = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
+        #self.W_syn = nn.Parameter(torch.zeros(self.sub_no*3, self.cos_basis_no, 2) , requires_grad=True)
+        #self.pre_conv = nn.Sequential(
+                        #nn.Conv1d(in_channels=self.sub_no*2,out_channels=self.sub_no*2,
+                                  #kernel_size=2*self.T_no+1,padding=self.T_no,groups=self.sub_no*2),
+        #)
+                        #nn.LeakyReLU())
+        self.conv_list1 = nn.Sequential(
+                        nn.Conv1d(in_channels=self.sub_no*2,out_channels=self.sub_no*1,
+                                  kernel_size=2*self.T_no+1,padding=self.T_no,groups=1),
+                        nn.LeakyReLU(),
+                        nn.Conv1d(in_channels=self.sub_no*1,out_channels=self.sub_no*1,
+                                  kernel_size=2*self.T_no+1,padding=self.T_no,groups=1),
+                        #nn.LeakyReLU(),
+                        #nn.Conv1d(in_channels=self.sub_no*2,out_channels=self.sub_no*2,
+                                  #kernel_size=2*self.T_no+1,padding=self.T_no,groups=self.sub_no),
+                        #nn.LeakyReLU(),
+                        #nn.Conv1d(in_channels=self.sub_no*1,out_channels=self.sub_no,
+                                  #kernel_size=2*self.T_no+1,padding=self.T_no,groups=self.sub_no)
+        )
+        #self.conv_list2 = nn.Sequential(
+                        #nn.Conv1d(in_channels=self.sub_no,out_channels=self.sub_no,
+                                  #kernel_size=2*self.T_no+1,padding=self.T_no,groups=self.sub_no),
+                        #nn.LeakyReLU(),
+                        #nn.Conv1d(in_channels=self.sub_no,out_channels=self.sub_no,
+                                  #kernel_size=2*self.T_no+1,padding=self.T_no,groups=self.sub_no),
+                        #nn.LeakyReLU(),
+                        #nn.Conv1d(in_channels=self.sub_no,out_channels=self.sub_no,
+                                  #kernel_size=2*self.T_no+1,padding=self.T_no,groups=self.sub_no)
+        #)
 
         ### History Parameters ###
         self.W_hist = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
@@ -52,9 +80,6 @@ class VAE_Hist_GLM(nn.Module):
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
-        
-        self.root_weight_1 = nn.Parameter(torch.randn(5), requires_grad=True)
-        self.root_weight_2 = nn.Parameter(torch.randn(5), requires_grad=True)
         
         ### C_syn ###
         #self.C_syn_e_raw = nn.Parameter(torch.ones(self.sub_no, 2000) , requires_grad=True)
@@ -85,7 +110,7 @@ class VAE_Hist_GLM(nn.Module):
             for i in range(200):
                 max_idx = torch.argmax(self.C_syn_i_raw[:,i])
                 C_syn_i[max_idx,i] = 1
-
+        
         syn_e = torch.matmul(S_e, C_syn_e.T)
         syn_i = torch.matmul(S_i, C_syn_i.T)
         """
@@ -93,29 +118,18 @@ class VAE_Hist_GLM(nn.Module):
         syn_e = torch.matmul(S_e, self.C_syn_e.T)
         syn_i = torch.matmul(S_i, self.C_syn_i.T)
         
-        full_e_kern = torch.matmul(self.W_syn[:,:,0], self.cos_basis)
-        full_i_kern = torch.matmul(self.W_syn[:,:,1], self.cos_basis)
+        syn_in = torch.zeros(T_data, self.sub_no*2).to(self.device)
+        for i in range(self.sub_no):
+            syn_in[:,i*2] = syn_in[:,i*2] + syn_e[:,i]
+            syn_in[:,i*2+1] = syn_in[:,i*2+1] + syn_i[:,i]
+            
+        syn = self.conv_list1(syn_in.T.unsqueeze(0)).squeeze(0).T
         
-        full_e_kern = torch.flip(full_e_kern, [1])
-        full_i_kern = torch.flip(full_i_kern, [1])
-        full_e_kern = full_e_kern.unsqueeze(1)
-        full_i_kern = full_i_kern.unsqueeze(1)
-
-        pad_syn_e = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
-        pad_syn_i = torch.zeros(T_data + self.T_no - 1, self.sub_no).to(self.device)
-        pad_syn_e[-T_data:] = pad_syn_e[-T_data:] + syn_e
-        pad_syn_i[-T_data:] = pad_syn_i[-T_data:] + syn_i
-        pad_syn_e = pad_syn_e.T.reshape(1,self.sub_no,-1)
-        pad_syn_i = pad_syn_i.T.reshape(1,self.sub_no,-1)
-        
-        filtered_e = F.conv1d(pad_syn_e, full_e_kern, padding=0, groups=self.sub_no).squeeze(0).T
-        filtered_i = F.conv1d(pad_syn_i, full_i_kern, padding=0,  groups=self.sub_no).squeeze(0).T
- 
-        syn = filtered_e + filtered_i
-        
-        out_filters = torch.vstack((torch.flip(full_e_kern.squeeze(1), [1]),
-                                   torch.flip(full_i_kern.squeeze(1), [1]),
+        out_filters = torch.vstack((self.conv_list1[0].weight.reshape(-1,self.T_no*2+1),
+                                   self.conv_list1[2].weight.reshape(-1,self.T_no*2+1),
+                                   #self.conv_list1[4].weight.reshape(-1,self.T_no*2+1)
                                    ))
+        #syn = e_out + i_out
         
         return syn, out_filters
 
@@ -146,21 +160,20 @@ class VAE_Hist_GLM(nn.Module):
         
         root_leaf_idx = torch.where(self.C_den[0] == 1)[0]
         root_in = hist_filt + syn[:,0] + torch.sum(ns_out[:,root_leaf_idx] * self.W_sub[root_leaf_idx]**2, 1) + self.Theta[0]
-        root_in_1 = F.leaky_relu(torch.matmul(root_in.reshape(-1,1), self.root_weight_1.reshape(1,-1)))
-        root_in_2 = torch.matmul(root_in_1, self.root_weight_2)
-        
-        ns_out[:,0] = ns_out[:,0] + torch.sigmoid(root_in_2)
+        ns_out[:,0] = ns_out[:,0] + torch.sigmoid(root_in)
         
         final_Z = ns_out[:,0]
         
         t = torch.arange(self.T_no).to(self.device)
         t_tau = t / self.Tau_spk**2
         spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        #spk_kern = torch.matmul(self.W_spk, self.cos_basis)
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(pad_Z, spk_kern).flatten()[:-1]
         
         final_V = spk_filt + self.V_o
         hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
+        #out_filters = torch.vstack((syn_filters, hist_out))
         out_filters = syn_filters
 
         return final_V, final_Z, out_filters
@@ -193,11 +206,8 @@ class VAE_Hist_GLM(nn.Module):
             hist_filt = torch.sum(spk_out[t:t+self.T_no].clone() * hist_kern)
             root_prop = torch.sum(ns_out[t,root_leaf_idx] * self.W_sub[root_leaf_idx]**2)
             root_in = syn[t,0] + hist_filt + root_prop + self.Theta[0]
-            root_in_1 = F.leaky_relu(root_in * self.root_weight_1)
-            root_in_2 = torch.matmul(root_in_1, self.root_weight_2)
-            
-            Z_out[t+self.T_no] = Z_out[t+self.T_no] + torch.sigmoid(root_in_2)
-            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_in_2))
+            Z_out[t+self.T_no] = Z_out[t+self.T_no] + torch.sigmoid(root_in)
+            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_in))
         
         final_Z = Z_out[self.T_no:]
         final_spk = spk_out[self.T_no:]
@@ -205,11 +215,13 @@ class VAE_Hist_GLM(nn.Module):
         t = torch.arange(self.T_no).to(self.device)
         t_tau = t / self.Tau_spk**2
         spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        #spk_kern = torch.matmul(self.W_spk, self.cos_basis)
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(spk_out.reshape(1,1,-1), spk_kern).flatten()[:-1]
         final_V = spk_filt + self.V_o
         
         hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
+        #out_filters = torch.vstack((syn_filters, hist_out))
         out_filters = syn_filters
 
         return final_V, final_Z, out_filters

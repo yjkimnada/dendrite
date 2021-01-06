@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class VAE_Hist_GLM(nn.Module):
+class VAE_Hist_GLM5(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
         super().__init__()
 
@@ -12,13 +12,11 @@ class VAE_Hist_GLM(nn.Module):
         self.C_syn_e = C_syn_e
         self.C_syn_i = C_syn_i
         self.device = device
-        self.layer_no = 3
-
         
         ### Cosine Basis ###
-        self.cos_basis_no = 19
+        self.cos_basis_no = 20
         self.cos_shift = 1
-        self.cos_scale = 5
+        self.cos_scale = 6
         self.cos_basis = torch.zeros(self.cos_basis_no, self.T_no).to(self.device)
         for i in range(self.cos_basis_no):
             phi = 1.5707963267948966*i
@@ -32,7 +30,6 @@ class VAE_Hist_GLM(nn.Module):
             basis[raw_cos < xmin] = 0.0
             basis[raw_cos > xmax] = 0.0 
             self.cos_basis[i] = self.cos_basis[i] + basis
-        
             
         ### Synapse Parameters ###
         self.W_syn = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
@@ -44,7 +41,6 @@ class VAE_Hist_GLM(nn.Module):
         self.W_sub = nn.Parameter(torch.ones(self.sub_no)*0.1 , requires_grad=True)
         
         ### Spike Parameters ###
-        #self.W_spk = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
         self.W_spk = nn.Parameter(torch.ones(1), requires_grad=True)
         self.Delta_spk = nn.Parameter(torch.ones(1), requires_grad=True)
         self.Tau_spk = nn.Parameter(torch.ones(1)*3, requires_grad=True)
@@ -53,42 +49,13 @@ class VAE_Hist_GLM(nn.Module):
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
         self.Theta = nn.Parameter(torch.zeros(self.sub_no), requires_grad=True)
         
-        self.root_weight_1 = nn.Parameter(torch.randn(5), requires_grad=True)
-        self.root_weight_2 = nn.Parameter(torch.randn(5), requires_grad=True)
-        
-        ### C_syn ###
-        #self.C_syn_e_raw = nn.Parameter(torch.ones(self.sub_no, 2000) , requires_grad=True)
-        #self.C_syn_i_raw = nn.Parameter(torch.ones(self.sub_no, 200) , requires_grad=True)
+        self.weight1 = nn.Parameter(torch.randn(self.sub_no, 5)*0.1, requires_grad=True)
+        self.weight2 = nn.Parameter(torch.randn(self.sub_no, 5, 5)*0.1, requires_grad=True)
+        self.weight3 = nn.Parameter(torch.randn(self.sub_no, 5, 5)*0.1, requires_grad=True)
+        self.weight4 = nn.Parameter(torch.randn(5, self.sub_no)*0.1, requires_grad=True)
 
-    def spike_convolve(self, S_e, S_i, test):
+    def spike_convolve(self, S_e, S_i):
         T_data = S_e.shape[0]
-        
-        """
-        if test == False:
-            eps = 1e-8
-            temp=0.025
-            u_e = torch.rand_like(self.C_syn_e_raw)
-            u_i = torch.rand_like(self.C_syn_i_raw)
-            g_e = - torch.log(- torch.log(u_e + eps) + eps)
-            g_i = - torch.log(- torch.log(u_i + eps) + eps)
-
-            C_syn_e = F.softmax((self.C_syn_e_raw + g_e) / temp, dim=0)
-            C_syn_i = F.softmax((self.C_syn_i_raw + g_i) / temp, dim=0)
-            
-        elif test == True:
-            C_syn_e = torch.zeros(self.sub_no, 2000).to(self.device)
-            C_syn_i = torch.zeros(self.sub_no, 200).to(self.device)
-            
-            for i in range(2000):
-                max_idx = torch.argmax(self.C_syn_e_raw[:,i])
-                C_syn_e[max_idx,i] = 1
-            for i in range(200):
-                max_idx = torch.argmax(self.C_syn_i_raw[:,i])
-                C_syn_i[max_idx,i] = 1
-
-        syn_e = torch.matmul(S_e, C_syn_e.T)
-        syn_i = torch.matmul(S_i, C_syn_i.T)
-        """
         
         syn_e = torch.matmul(S_e, self.C_syn_e.T)
         syn_i = torch.matmul(S_i, self.C_syn_i.T)
@@ -121,7 +88,7 @@ class VAE_Hist_GLM(nn.Module):
 
     def train_forward(self, S_e, S_i, Z):
         T_data = S_e.shape[0]
-        syn, syn_filters = self.spike_convolve(S_e, S_i, test=False)
+        syn, syn_filters = self.spike_convolve(S_e, S_i)
         ns_out = torch.zeros(T_data , self.sub_no).to(self.device)
 
         pad_Z = torch.zeros(T_data + self.T_no).to(self.device)
@@ -137,19 +104,28 @@ class VAE_Hist_GLM(nn.Module):
             leaf_idx = torch.where(self.C_den[sub_idx] == 1)[0]
                 
             if torch.numel(leaf_idx) == 0:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx]
-                ns_out[:,sub_idx] = ns_out[:,sub_idx] + F.leaky_relu(ns_in)
+                ns_in = F.leaky_relu(syn[:,sub_idx] + self.Theta[sub_idx])
+                ns_out_1 = F.leaky_relu(torch.matmul(ns_in.reshape(-1,1) , self.weight1[sub_idx].reshape(1,-1)))
+                ns_out_2 = F.leaky_relu(torch.matmul(ns_out_1, self.weight2[sub_idx]))
+                ns_out_3 = F.leaky_relu(torch.matmul(ns_out_2, self.weight3[sub_idx]))
+                ns_out_4 = torch.matmul(ns_out_3 , self.weight4[:,sub_idx])
+                ns_out[:,sub_idx] = ns_out[:,sub_idx] + ns_out_4
 
             else:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1)
-                ns_out[:,sub_idx] = ns_out[:,sub_idx] + F.leaky_relu(ns_in)
+                ns_in = F.leaky_relu(syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1))
+                ns_out_1 = F.leaky_relu(torch.matmul(ns_in.reshape(-1,1) , self.weight1[sub_idx].reshape(1,-1)))
+                ns_out_2 = F.leaky_relu(torch.matmul(ns_out_1, self.weight2[sub_idx]))
+                ns_out_3 = F.leaky_relu(torch.matmul(ns_out_2, self.weight3[sub_idx]))
+                ns_out_4 = torch.matmul(ns_out_3 , self.weight4[:,sub_idx])
+                ns_out[:,sub_idx] = ns_out[:,sub_idx] + ns_out_4
         
         root_leaf_idx = torch.where(self.C_den[0] == 1)[0]
-        root_in = hist_filt + syn[:,0] + torch.sum(ns_out[:,root_leaf_idx] * self.W_sub[root_leaf_idx]**2, 1) + self.Theta[0]
-        root_in_1 = F.leaky_relu(torch.matmul(root_in.reshape(-1,1), self.root_weight_1.reshape(1,-1)))
-        root_in_2 = torch.matmul(root_in_1, self.root_weight_2)
-        
-        ns_out[:,0] = ns_out[:,0] + torch.sigmoid(root_in_2)
+        root_in = F.leaky_relu(hist_filt + syn[:,0] + torch.sum(ns_out[:,root_leaf_idx] * self.W_sub[root_leaf_idx]**2, 1) + self.Theta[0])
+        root_out_1 = F.leaky_relu(torch.matmul(root_in.reshape(-1,1) , self.weight1[0].reshape(1,-1)))
+        root_out_2 = F.leaky_relu(torch.matmul(root_out_1, self.weight2[0]))
+        root_out_3 = F.leaky_relu(torch.matmul(root_out_2, self.weight3[0]))
+        root_out_4 = torch.matmul(root_out_3 , self.weight4[:,0])
+        ns_out[:,0] = ns_out[:,0] + torch.sigmoid(root_out_4)
         
         final_Z = ns_out[:,0]
         
@@ -161,13 +137,13 @@ class VAE_Hist_GLM(nn.Module):
         
         final_V = spk_filt + self.V_o
         hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
-        out_filters = syn_filters
+        out_filters = torch.vstack((syn_filters, hist_out))
 
         return final_V, final_Z, out_filters
 
     def test_forward(self, S_e, S_i):
         T_data = S_e.shape[0]
-        syn, syn_filters = self.spike_convolve(S_e, S_i, test=True)
+        syn, syn_filters = self.spike_convolve(S_e, S_i)
         ns_out = torch.zeros(T_data , self.sub_no).to(self.device)
         Z_out = torch.zeros(T_data+self.T_no).to(self.device)
         spk_out = torch.zeros(T_data+self.T_no).to(self.device)
@@ -180,24 +156,34 @@ class VAE_Hist_GLM(nn.Module):
             leaf_idx = torch.where(self.C_den[sub_idx] == 1)[0]
                 
             if torch.numel(leaf_idx) == 0:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx]
-                ns_out[:,sub_idx] = ns_out[:,sub_idx] + F.leaky_relu(ns_in)
+                ns_in = F.leaky_relu(syn[:,sub_idx] + self.Theta[sub_idx])
+                ns_out_1 = F.leaky_relu(torch.matmul(ns_in.reshape(-1,1) , self.weight1[sub_idx].reshape(1,-1)))
+                ns_out_2 = F.leaky_relu(torch.matmul(ns_out_1, self.weight2[sub_idx]))
+                ns_out_3 = F.leaky_relu(torch.matmul(ns_out_2, self.weight3[sub_idx]))
+                ns_out_4 = torch.matmul(ns_out_3 , self.weight4[:,sub_idx])
+                ns_out[:,sub_idx] = ns_out[:,sub_idx] + ns_out_4
 
             else:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1)
-                ns_out[:,sub_idx] = ns_out[:,sub_idx] + F.leaky_relu(ns_in)
+                ns_in = F.leaky_relu(syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1))
+                ns_out_1 = F.leaky_relu(torch.matmul(ns_in.reshape(-1,1) , self.weight1[sub_idx].reshape(1,-1)))
+                ns_out_2 = F.leaky_relu(torch.matmul(ns_out_1, self.weight2[sub_idx]))
+                ns_out_3 = F.leaky_relu(torch.matmul(ns_out_2, self.weight3[sub_idx]))
+                ns_out_4 = torch.matmul(ns_out_3 , self.weight4[:,sub_idx])
+                ns_out[:,sub_idx] = ns_out[:,sub_idx] + ns_out_4
         
         root_leaf_idx = torch.where(self.C_den[0] == 1)[0]
         
         for t in range(T_data):
             hist_filt = torch.sum(spk_out[t:t+self.T_no].clone() * hist_kern)
             root_prop = torch.sum(ns_out[t,root_leaf_idx] * self.W_sub[root_leaf_idx]**2)
-            root_in = syn[t,0] + hist_filt + root_prop + self.Theta[0]
-            root_in_1 = F.leaky_relu(root_in * self.root_weight_1)
-            root_in_2 = torch.matmul(root_in_1, self.root_weight_2)
-            
-            Z_out[t+self.T_no] = Z_out[t+self.T_no] + torch.sigmoid(root_in_2)
-            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_in_2))
+            root_in = F.leaky_relu(syn[t,0] + hist_filt + root_prop + self.Theta[0])
+            root_out_1 = F.leaky_relu(root_in * self.weight1[0])
+            root_out_2 = F.leaky_relu(torch.matmul(root_out_1, self.weight2[0]))
+            root_out_3 = F.leaky_relu(torch.matmul(root_out_2, self.weight3[0]))
+            root_out_4 = torch.matmul(root_out_3 , self.weight4[:,0])
+
+            Z_out[t+self.T_no] = Z_out[t+self.T_no] + torch.sigmoid(root_out_4)
+            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(root_out_4))
         
         final_Z = Z_out[self.T_no:]
         final_spk = spk_out[self.T_no:]
@@ -210,7 +196,7 @@ class VAE_Hist_GLM(nn.Module):
         final_V = spk_filt + self.V_o
         
         hist_out = torch.flip(hist_kern.flatten(), [0]).reshape(1,-1)
-        out_filters = syn_filters
+        out_filters = torch.vstack((syn_filters, hist_out))
 
         return final_V, final_Z, out_filters
 
@@ -225,6 +211,7 @@ class NN_Encoder(nn.Module):
         self.device = device
         self.layer_no = layer_no
 
+        """
         ### Cosine Basis ###
         self.cos_basis_no = 19
         self.cos_shift = 1
@@ -247,6 +234,7 @@ class NN_Encoder(nn.Module):
         self.W_syn = nn.Parameter(torch.zeros(self.sub_no, self.cos_basis_no, 2) , requires_grad=True)
         
         self.Theta = nn.Parameter(torch.zeros(1), requires_grad=True)
+        """
 
         ### TCN ###
         modules = []
@@ -279,6 +267,7 @@ class NN_Encoder(nn.Module):
         syn_e = torch.matmul(S_e, self.C_syn_e[:].T)
         syn_i = torch.matmul(S_i, self.C_syn_i[:].T)
 
+        """
         e_kern = torch.matmul(self.W_syn[:,:,0], self.cos_basis)
         i_kern = torch.matmul(self.W_syn[:,:,1], self.cos_basis)
         e_kern = torch.flip(e_kern, [1]).unsqueeze(1)
@@ -295,18 +284,17 @@ class NN_Encoder(nn.Module):
         filtered_i = F.conv1d(pad_syn_i, i_kern, groups=self.sub_no).squeeze(0).T
 
         raw_syn = filtered_e + filtered_i 
-        #syn = torch.sum(raw_syn, 1)
+        syn = torch.sum(raw_syn, 1)
+        """
 
         nn = self.conv_list(V.reshape(1,1,-1)).flatten()
 
-        #Z_out = torch.sigmoid(nn+syn+self.Theta)
         Z_out = torch.sigmoid(nn)
         spk_out_raw = torch.zeros(T_data, 2).to(self.device)
-        #spk_out_raw[:,0] = spk_out_raw[:,0] + nn+syn+self.Theta
         spk_out_raw[:,0] = spk_out_raw[:,0] + nn
         
         eps = 1e-8
-        temp=0.025
+        temp=0.1
         u = torch.rand_like(spk_out_raw)
         g = - torch.log(- torch.log(u + eps) + eps)
 
@@ -314,3 +302,132 @@ class NN_Encoder(nn.Module):
         spk_out = spk_out_pad[:,0]
 
         return spk_out, Z_out
+    
+class NN_Decoder(nn.Module):
+    def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
+        super().__init__()
+
+        self.T_no = 50
+        self.C_den = C_den
+        self.sub_no = C_syn_e.shape[0]
+        self.C_syn_e = C_syn_e
+        self.C_syn_i = C_syn_i
+        self.device = device
+        
+        ### EXP BASIS ###
+        self.basis_no = 34
+        self.T_max = self.T_no*2+1
+        self.sigma = 3
+       
+        self.basis = torch.zeros(self.basis_no, self.T_max).to(self.device)
+        self.points = torch.arange(0, 5*self.basis_no, 3)
+        for i in range(self.basis_no):
+            point = self.points[i]
+            raw = torch.arange(self.T_max).to(self.device)
+            part = torch.exp(-(raw - point)**2/self.sigma)
+            self.basis[i] = part
+        
+        ### BASIS WEIGHTS ###
+        self.hid_no = 20
+        
+        self.weight1 = nn.Parameter(torch.randn(self.hid_no, self.sub_no*2, self.basis_no)*0.01 , requires_grad=True)
+        #self.weight2 = nn.Parameter(torch.randn(self.hid_no, self.hid_no, self.basis_no)*0.01 , requires_grad=True)
+        #self.weight3 = nn.Parameter(torch.randn(self.hid_no, self.hid_no, self.basis_no)*0.01 , requires_grad=True)
+        self.weight4 = nn.Parameter(torch.randn(1, self.hid_no, self.basis_no)*0.01 , requires_grad=True)
+        
+        ### Hist BASIS ###
+        self.hist_basis_no = 18
+        self.sigma = 3
+       
+        self.hist_basis = torch.zeros(self.hist_basis_no, self.T_no).to(self.device)
+        self.hist_points = torch.arange(0, 5*self.hist_basis_no, 3)
+        for i in range(self.hist_basis_no):
+            point = self.hist_points[i]
+            raw = torch.arange(self.T_no).to(self.device)
+            part = torch.exp(-(raw - point)**2/self.sigma)
+            self.hist_basis[i] = part
+        
+        self.W_hist = nn.Parameter(torch.randn(self.hist_basis_no)*0.01 , requires_grad=True)
+        
+        self.Theta = nn.Parameter(torch.randn(1)*0.01 , requires_grad=True)
+        
+        ### Spike Parameters ###
+        self.W_spk = nn.Parameter(torch.ones(1), requires_grad=True)
+        self.Delta_spk = nn.Parameter(torch.ones(1), requires_grad=True)
+        self.Tau_spk = nn.Parameter(torch.ones(1)*3, requires_grad=True)
+        
+    def train_forward(self, S_e, S_i, Z):
+        T_data = S_e.shape[0]
+        
+        kern1 = torch.matmul(self.weight1 , self.basis)
+        #kern2 = torch.matmul(self.weight2 , self.basis)
+        #kern3 = torch.matmul(self.weight3 , self.basis)
+        kern4 = torch.matmul(self.weight4 , self.basis)
+        
+        syn_e = torch.matmul(S_e, self.C_syn_e.T)
+        syn_i = torch.matmul(S_i, self.C_syn_i.T)
+        syn_in = torch.hstack((syn_e, syn_i))
+        syn_in = syn_in.T.unsqueeze(0)
+        
+        out1 = F.leaky_relu(F.conv1d(syn_in, kern1, padding=self.T_no, groups=1))
+        #out2 = F.leaky_relu(F.conv1d(out1, kern2, padding=self.T_no))
+        #out3 = F.leaky_relu(F.conv1d(out2, kern3, padding=self.T_no))
+        out4 = F.conv1d(out1, kern4, padding=self.T_no)
+        
+        pad_Z = torch.zeros(T_data + self.T_no).to(self.device)
+        pad_Z[-T_data:] = pad_Z[-T_data:] + Z
+        pad_Z = pad_Z.reshape(1,1,-1)
+        
+        hist_kern = torch.matmul(self.W_hist, self.hist_basis).reshape(1,1,-1)
+        hist_filt = F.conv1d(pad_Z, hist_kern).flatten()[:-1]
+        
+        prob_out = torch.sigmoid(out4 + hist_filt + self.Theta).flatten()
+        
+        t = torch.arange(self.T_no).to(self.device)
+        t_tau = t / self.Tau_spk**2
+        spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
+        spk_filt = F.conv1d(pad_Z, spk_kern).flatten()[:-1]
+        
+        return spk_filt, prob_out
+    
+    def test_forward(self, S_e, S_i):
+        T_data = S_e.shape[0]
+        
+        kern1 = torch.matmul(self.weight1 , self.basis)
+        #kern2 = torch.matmul(self.weight2 , self.basis)
+        #kern3 = torch.matmul(self.weight3 , self.basis)
+        kern4 = torch.matmul(self.weight4 , self.basis)
+        
+        syn_e = torch.matmul(S_e, self.C_syn_e.T)
+        syn_i = torch.matmul(S_i, self.C_syn_i.T)
+        syn_in = torch.hstack((syn_e, syn_i))
+        syn_in = syn_in.T.unsqueeze(0)
+
+        out1 = F.leaky_relu(F.conv1d(syn_in, kern1, padding=self.T_no, groups=1))
+        #out2 = F.leaky_relu(F.conv1d(out1, kern2, padding=self.T_no))
+        #out3 = F.leaky_relu(F.conv1d(out2, kern3, padding=self.T_no))
+        out4 = F.conv1d(out1, kern4, padding=self.T_no).flatten()
+
+        hist_kern = torch.matmul(self.W_hist, self.hist_basis)
+        
+        spk_out = torch.zeros(T_data + self.T_no).to(self.device)
+        prob_out = torch.zeros(T_data).to(self.device)
+        
+        for t in range(T_data):
+            spk_hist = spk_out[t:t+self.T_no].clone()
+            hist_in = torch.dot(spk_hist, hist_kern)
+            prob_out[t] = prob_out[t] + torch.sigmoid(out4[t] + hist_in + self.Theta)
+            spk_out[t+self.T_no] = spk_out[t+self.T_no] + torch.bernoulli(torch.sigmoid(out4[t] + hist_in + self.Theta))
+        
+        
+        
+        t = torch.arange(self.T_no).to(self.device)
+        t_tau = t / self.Tau_spk**2
+        spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
+        spk_filt = F.conv1d(spk_out.reshape(1,1,-1), spk_kern).flatten()[:-1]
+        
+        return spk_filt, prob_out
+        
+    

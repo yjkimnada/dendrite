@@ -1,4 +1,5 @@
 from models.alpha_glm import Alpha_GLM
+from models.cos_glm import Cos_GLM
 from models.alpha_cos2_glm import Alpha_Cos2_GLM
 from models.alpha_hist_glm import Alpha_Hist_GLM
 from models.gp_glm import GP_GLM
@@ -42,6 +43,20 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
 
     if model_type == "alpha":
         model = Alpha_GLM(C_den=C_den,
+                         E_no=E_no,
+                         I_no=I_no,
+                         T_no=T_no,
+                         greedy=False,
+                         C_syn_e=C_syn_e,
+                         C_syn_i=C_syn_i,
+                         device = device)
+
+        optimizer = torch.optim.Adam([
+            {'params': model.parameters()},
+            ], lr = lr)
+        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=9999999, gamma=0.5)
+    elif model_type == "cos":
+        model = Cos_GLM(C_den=C_den,
                          E_no=E_no,
                          I_no=I_no,
                          T_no=T_no,
@@ -263,8 +278,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
     print(test_score)
     print(np.mean((V_test.cpu().detach().numpy() - test_pred)**2))
 
-    torch.save(model.state_dict(), save_dir+model_type+"_"+"sub"+str(sub_no)+"_model.pt")
-    np.savez(save_dir+model_type+"_"+"sub"+str(sub_no)+"_output.npz",
+    torch.save(model.state_dict(), save_dir+model_type+"_"+"sub"+str(sub_no)+"_diff_model.pt")
+    np.savez(save_dir+model_type+"_"+"sub"+str(sub_no)+"_diff_output.npz",
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,

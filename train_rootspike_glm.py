@@ -1,5 +1,5 @@
 from models.alpha_rootspike_glm import Alpha_RootSpike_GLM
-#from models.alpha_rootspike_2nonlin_glm import Alpha_RootSpike_2Nonlin_GLM
+from models.cos_rootspike_glm import Cos_RootSpike_GLM
 
 import numpy as np
 import torch
@@ -51,8 +51,8 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
             {'params': model.parameters()},
             ], lr = lr)
         #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
-    elif model_type == "alpha_rootspike_2nonlin":
-        model = Alpha_RootSpike_2Nonlin_GLM(C_den=C_den,
+    elif model_type == "cos_rootspike":
+        model = Cos_RootSpike_GLM(C_den=C_den,
                          E_no=E_no,
                          I_no=I_no,
                          T_no=T_no,
@@ -64,10 +64,8 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         optimizer = torch.optim.Adam([
             {'params': model.parameters()},
             ], lr = lr)
-        scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
+        #scheduler = optim.lr_scheduler.StepLR(optimizer, step_size=4000, gamma=0.5)
     
-    
-
     model.to(device)
     print(sum(p.numel() for p in model.parameters() if p.requires_grad))
     
@@ -104,7 +102,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         optimizer.step()
         #scheduler.step()
         
-        if (i%2500 == 2499) or (i == iter_no-1):
+        if (i%1000 == 999) or (i == iter_no-1):
             model.eval()
             
             V_pred, Z_pred, L_pred, out_filters = model.test_forward(test_E_neural,
@@ -117,7 +115,21 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
             
             test_var = torch.var(V_test - V_pred)
             test_bce = torch.mean(bce_criterion(L_pred ,Z_test))
-            print(i, test_score, test_bce.item(), torch.sum(Z_test).item(), torch.sum(Z_pred).item())
+            
+            good_no = 0
+            bad_no = 0
+            
+            for x in torch.where(Z_pred == 1)[0]:
+                close_count = 0
+                for y in torch.where(Z_test == 1)[0]:
+                    if torch.abs(x-y) <= 5:
+                        close_count += 1
+                if close_count > 0:
+                    good_no += 1
+                else:
+                    bad_no += 1
+            
+            print(i, test_score, test_bce.item(), good_no, bad_no)
         
 
     model.eval()

@@ -62,8 +62,8 @@ class Greedy_Search:
             
             for j in range(i+1):
                 if j != best_idx:
-                    os.remove(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(j)+"_model.pt")
-                    os.remove(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(j)+"_output.npz")
+                    os.remove(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(j)+"_smooth"+str(self.reg)+"_model.pt")
+                    os.remove(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(j)+"_smooth"+str(self.reg)+"_output.npz")
 
             print(i+2, "SUB: ", score_array.cpu().detach().numpy())
             print("CUMULATIVE: ", final_scores[:i+1].cpu().detach().numpy())
@@ -86,7 +86,7 @@ class Greedy_Search:
 
 
         model.to(self.device)
-        bce_criterion = nn.BCELoss(reduction="none")
+        bce_criterion = nn.BCELoss(reduction="mean")
 
         temp_list = [0.5, 0.4, 0.3, 0.2, 0.1,
                     0.09, 0.08, 0.07, 0.06,
@@ -122,14 +122,11 @@ class Greedy_Search:
                                                             batch_Z,
                                                             temp)
 
-            loss_weights = torch.ones(self.batch_size).to(self.device)
-            Z_idx = torch.where(batch_Z == 1)[0]
-            loss_weights[Z_idx] *= 1
-
+            bce_loss = bce_criterion(Z_pred, batch_Z)
             var_loss = torch.var(batch_V - V_pred)
-            bce_loss = torch.mean(bce_criterion(Z_pred, batch_Z) * loss_weights)
 
-            loss = var_loss + bce_loss
+            loss = bce_loss + var_loss
+                        
             loss.backward()
             optimizer.step()
             #scheduler.step()
@@ -159,7 +156,7 @@ class Greedy_Search:
         test_mse = torch.mean((V_pred - self.V_test)**2).item()
         test_gauss = 0.5*test_mse
         
-        test_bce = torch.mean(bce_criterion(L_pred, self.Z_test)).item()
+        test_bce = bce_criterion(L_pred, self.Z_test).item()
         nll = test_bce + test_gauss
 
         print("VAR EXP:",np.round(test_var_exp,5), "GAUSS:",np.round(test_gauss,5), "BCE:", np.round(test_bce,5))
@@ -177,8 +174,8 @@ class Greedy_Search:
                 bad_no += 1
         print("GOOD: ", good_no, "BAD: ", bad_no)
 
-        torch.save(model.state_dict(), self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(new_idx)+"_model.pt")
-        np.savez(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(new_idx)+"_output.npz",
+        torch.save(model.state_dict(), self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(new_idx)+"_smooth"+str(self.reg)+"_model.pt")
+        np.savez(self.save_dir+self.model_type+"_"+"sub"+str(sub_no)+"-"+str(new_idx)+"_smooth"+str(self.reg)+"_output.npz",
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,
