@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class VAE_Hist_GLM(nn.Module):
+class VAE_NoHist_GLM(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
         super().__init__()
 
@@ -15,9 +15,9 @@ class VAE_Hist_GLM(nn.Module):
         
         
         ### Cosine Basis ###
-        self.cos_basis_no = 23
+        self.cos_basis_no = 12
         self.cos_shift = 1
-        self.cos_scale = 6
+        self.cos_scale = 3
         self.cos_basis = torch.zeros(self.cos_basis_no, self.T_no).to(self.device)
         for i in range(self.cos_basis_no):
             phi = 1.5707963267948966*i
@@ -52,12 +52,13 @@ class VAE_Hist_GLM(nn.Module):
         #self.W_hist = nn.Parameter(torch.zeros(self.cos_basis_no) , requires_grad=True)
 
         ### Ancestor Subunit Parameters ###
-        self.W_sub = nn.Parameter(torch.ones(self.sub_no)*0.1 , requires_grad=True)
+        self.W_sub = nn.Parameter(torch.zeros(self.sub_no)*0.1 , requires_grad=True)
         
         ### Spike Parameters ###
-        self.W_spk = nn.Parameter(torch.ones(1), requires_grad=True)
-        self.Delta_spk = nn.Parameter(torch.ones(1), requires_grad=True)
-        self.Tau_spk = nn.Parameter(torch.ones(1)*3, requires_grad=True)
+        #self.W_spk = nn.Parameter(torch.ones(1)*(-1), requires_grad=True)
+        self.W_spk = torch.ones(1).to(self.device)
+        #self.Delta_spk = nn.Parameter(torch.zeros(1), requires_grad=True)
+        self.Tau_spk = nn.Parameter(torch.ones(1), requires_grad=True)
 
         ### Subunit Output Parameters ###
         self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
@@ -67,7 +68,7 @@ class VAE_Hist_GLM(nn.Module):
         #self.C_syn_e_raw = nn.Parameter(torch.ones(self.sub_no, 2000) , requires_grad=True)
         #self.C_syn_i_raw = nn.Parameter(torch.ones(self.sub_no, 200) , requires_grad=True)
         
-        self.hid_no = 6
+        self.hid_no = 3
         self.W_root_1 = nn.Parameter(torch.randn(self.hid_no, 1 , self.exp_basis_no)*0.01 , requires_grad=True)
         self.W_root_2 = nn.Parameter(torch.randn(1, self.hid_no , self.exp_basis_no)*0.01 , requires_grad=True)
         #self.W_root_1 = nn.Parameter(torch.randn(self.hid_no, 1 , self.cos_basis_no)*0.01 , requires_grad=True)
@@ -106,8 +107,8 @@ class VAE_Hist_GLM(nn.Module):
         syn_e = torch.matmul(S_e, self.C_syn_e.T)
         syn_i = torch.matmul(S_i, self.C_syn_i.T)
         
-        full_e_kern = torch.matmul(self.W_syn[:,:,0]**2, self.cos_basis)
-        full_i_kern = torch.matmul(self.W_syn[:,:,1]**2*(-1), self.cos_basis)
+        full_e_kern = torch.matmul(self.W_syn[:,:,0], self.cos_basis)
+        full_i_kern = torch.matmul(self.W_syn[:,:,1], self.cos_basis)
         #full_e_kern = torch.matmul(self.W_syn[:,:,0], self.exp_basis)
         #full_i_kern = torch.matmul(self.W_syn[:,:,1], self.exp_basis)
         
@@ -162,7 +163,7 @@ class VAE_Hist_GLM(nn.Module):
             leaf_idx = torch.where(self.C_den[sub_idx] == 1)[0]
             
             if sub_idx == -self.sub_no:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1)
+                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * torch.exp(self.W_sub[leaf_idx]), 1)
                 ns_out1 = torch.tanh(ns_in)
                 #ns_out1 = ns_in
                 
@@ -182,13 +183,15 @@ class VAE_Hist_GLM(nn.Module):
                 ns_out[:,sub_idx] = ns_out[:,sub_idx] + torch.tanh(ns_in)
 
             else:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1)
+                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * torch.exp(self.W_sub[leaf_idx]), 1)
                 ns_out[:,sub_idx] = ns_out[:,sub_idx] + torch.tanh(ns_in)
         
         final_Z = ns_out[:,0]
         
         t = torch.arange(self.T_no).to(self.device)
+        #t_tau = t / torch.exp(self.Tau_spk)
         t_tau = t / self.Tau_spk**2
+        #spk_kern = t_tau * torch.exp(-t_tau) * torch.exp(self.W_spk)
         spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(pad_Z, spk_kern).flatten()[:-1]
@@ -218,7 +221,7 @@ class VAE_Hist_GLM(nn.Module):
             leaf_idx = torch.where(self.C_den[sub_idx] == 1)[0]
             
             if sub_idx == -self.sub_no:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1)
+                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * torch.exp(self.W_sub[leaf_idx]), 1)
                 ns_out1 = torch.tanh(ns_in)
                 #ns_out1 = ns_in
                 
@@ -238,7 +241,7 @@ class VAE_Hist_GLM(nn.Module):
                 ns_out[:,sub_idx] = ns_out[:,sub_idx] + torch.tanh(ns_in)
 
             else:
-                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * self.W_sub[leaf_idx]**2, 1)
+                ns_in = syn[:,sub_idx] + self.Theta[sub_idx] + torch.sum(ns_out[:,leaf_idx] * torch.exp(self.W_sub[leaf_idx]), 1)
                 ns_out[:,sub_idx] = ns_out[:,sub_idx] + torch.tanh(ns_in)
         
         final_Z = ns_out[:,0]
@@ -247,7 +250,9 @@ class VAE_Hist_GLM(nn.Module):
         spk_out[-T_data:] = spk_out[-T_data:] + final_spk
         
         t = torch.arange(self.T_no).to(self.device)
+        #t_tau = t / torch.exp(self.Tau_spk)
         t_tau = t / self.Tau_spk**2
+        #spk_kern = t_tau * torch.exp(-t_tau) * torch.exp(self.W_spk)
         spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(spk_out.reshape(1,1,-1), spk_kern).flatten()[:-1]

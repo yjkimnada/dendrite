@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class VAE_Hist_GLM4(nn.Module):
+class VAE_NoHist_GLM2(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, device):
         super().__init__()
 
@@ -13,7 +13,7 @@ class VAE_Hist_GLM4(nn.Module):
         self.C_syn_i = C_syn_i
         self.device = device
         
-        self.plex_no = 1
+        self.plex_no = 2
         
         ### Cosine Basis ###
         self.cos_basis_no = 22
@@ -46,9 +46,10 @@ class VAE_Hist_GLM4(nn.Module):
         self.W_sub = nn.Parameter(torch.randn(self.sub_no, self.plex_no)*0.1, requires_grad=True)
         
         ### Spike Parameters ###
-        self.W_spk = nn.Parameter(torch.ones(1), requires_grad=True)
+        #self.W_spk = nn.Parameter(torch.ones(1)*1.5, requires_grad=True)
+        self.W_spk = torch.ones(1).to(self.device)*1.6
         self.Delta_spk = nn.Parameter(torch.ones(1), requires_grad=True)
-        self.Tau_spk = nn.Parameter(torch.ones(1)*3, requires_grad=True)
+        self.Tau_spk = nn.Parameter(torch.ones(1)*2.25, requires_grad=True)
 
         ### Subunit Output Parameters ###
         #self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)

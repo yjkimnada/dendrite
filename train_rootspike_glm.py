@@ -102,6 +102,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
         optimizer.step()
         #scheduler.step()
         
+        
         if (i%1000 == 999) or (i == iter_no-1):
             model.eval()
             
@@ -118,6 +119,7 @@ def train_glm(model_type, V, Z, E_neural, I_neural, T_train, T_test,
             
             good_no = 0
             bad_no = 0
+            
             
             for x in torch.where(Z_pred == 1)[0]:
                 close_count = 0

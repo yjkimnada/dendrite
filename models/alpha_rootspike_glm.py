@@ -77,8 +77,8 @@ class Alpha_RootSpike_GLM(nn.Module):
         e_kern_ns = t_e_tau_ns * torch.exp(-t_e_tau_ns) * self.W_syn_ns[:,0].reshape(-1,1)**2
         i_kern_ns = t_i_tau_ns * torch.exp(-t_i_tau_ns) * self.W_syn_ns[:,1].reshape(-1,1)**2*(-1)
         
-        e_kern_s = torch.matmul(self.W_syn_s[:,:,0], self.cos_basis)
-        i_kern_s = torch.matmul(self.W_syn_s[:,:,1], self.cos_basis)
+        e_kern_s = torch.matmul(self.W_syn_s[:,:,0]**2, self.cos_basis)
+        i_kern_s = torch.matmul(self.W_syn_s[:,:,1]**2*(-1), self.cos_basis)
         
         e_kern_ns = torch.flip(e_kern_ns, [1]).unsqueeze(1)
         i_kern_ns = torch.flip(i_kern_ns, [1]).unsqueeze(1)
