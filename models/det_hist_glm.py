@@ -49,6 +49,8 @@ class Det_Hist_GLM(nn.Module):
 
         ### Output Parameters ###
         self.Theta = nn.Parameter(torch.ones(self.sub_no)*(0) , requires_grad=True)
+        self.Tau_out = nn.Parameter(torch.ones(1)*2.5 , requires_grad=True)
+        self.W_out = nn.Parameter(torch.ones(1)*1.5 , requires_grad=True)
         
         self.step = Step.apply
 
@@ -136,10 +138,21 @@ class Det_Hist_GLM(nn.Module):
         #Z_in = syn[:,0] + leaf_in + self.Theta[0]
         Z_out = self.step(Z_in)
         
+        Z_pad = torch.zeros(T_data + self.T_no).to(self.device)
+        Z_pad[-T_data:] = Z_pad[-T_data:] + Z_out
+        Z_pad = Z_pad.reshape(1,1,-1)
+        
+        t_out = torch.arange(self.T_no).to(self.device)
+        t_tau_out = t_out / torch.exp(self.Tau_out)
+        out_kern = t_tau_out * torch.exp(-t_tau_out) * torch.exp(self.W_out)
+        out_kern = torch.flip(out_kern, [0]).reshape(1,1,-1)
+        
+        V_out = F.conv1d(Z_pad, out_kern).flatten()[:-1]
+        
         out_filters = torch.vstack((syn_filters,
                                 torch.flip(hist_kern.squeeze(1), [1])))
         
-        return Z_out, out_filters
+        return V_out, Z_out, out_filters
     
     
     def test_forward(self, S_e, S_i):
@@ -183,8 +196,15 @@ class Det_Hist_GLM(nn.Module):
 
         out_filters = torch.vstack((syn_filters,
                                 torch.flip(hist_kern, [0]).reshape(1,-1)))
+        
+        t_out = torch.arange(self.T_no).to(self.device)
+        t_tau_out = t_out / torch.exp(self.Tau_out)
+        out_kern = t_tau_out * torch.exp(-t_tau_out) * torch.exp(self.W_out)
+        out_kern = torch.flip(out_kern, [0]).reshape(1,1,-1)
+        
+        V_out = F.conv1d(Z.reshape(1,1,-1), out_kern).flatten()[:-1]
 
-        return Z[self.T_no:], P, out_filters
+        return V_out, Z[self.T_no:], P, out_filters
 
 class Step(torch.autograd.Function):
     @staticmethod

@@ -37,9 +37,9 @@ class VAE_AllHist_GLM(nn.Module):
         self.W_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(-1) , requires_grad=True)
 
         ### Spiking Parameters ###
-        self.Tau_spk = nn.Parameter(torch.zeros(self.sub_no) , requires_grad=True)
+        self.Tau_spk = nn.Parameter(torch.ones(self.sub_no)*2.3 , requires_grad=True)
         self.Delta_spk = nn.Parameter(torch.zeros(self.sub_no) , requires_grad=True)
-        self.W_spk = nn.Parameter(torch.ones(self.sub_no)*(-1) , requires_grad=True)
+        self.W_spk = nn.Parameter(torch.ones(self.sub_no)*(0) , requires_grad=True)
 
         ### History Parameters ###
         self.W_hist = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no)*0.1 , requires_grad=True)

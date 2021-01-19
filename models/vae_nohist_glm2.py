@@ -46,10 +46,10 @@ class VAE_NoHist_GLM2(nn.Module):
         self.W_sub = nn.Parameter(torch.randn(self.sub_no, self.plex_no)*0.1, requires_grad=True)
         
         ### Spike Parameters ###
-        #self.W_spk = nn.Parameter(torch.ones(1)*1.5, requires_grad=True)
-        self.W_spk = torch.ones(1).to(self.device)*1.6
-        self.Delta_spk = nn.Parameter(torch.ones(1), requires_grad=True)
-        self.Tau_spk = nn.Parameter(torch.ones(1)*2.25, requires_grad=True)
+        self.W_spk = nn.Parameter(torch.ones(1)*(0), requires_grad=True)
+        #self.W_spk = torch.ones(1).to(self.device)*1.6
+        #self.Delta_spk = nn.Parameter(torch.ones(1), requires_grad=True)
+        self.Tau_spk = nn.Parameter(torch.ones(1)*2.3, requires_grad=True)
 
         ### Subunit Output Parameters ###
         #self.V_o = nn.Parameter(torch.randn(1), requires_grad=True)
@@ -153,8 +153,8 @@ class VAE_NoHist_GLM2(nn.Module):
         final_Z = torch.sigmoid(sub_out[:,0])
         
         t = torch.arange(self.T_no).to(self.device)
-        t_tau = t / self.Tau_spk**2
-        spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        t_tau = t / torch.exp(self.Tau_spk)
+        spk_kern = t_tau * torch.exp(-t_tau) * torch.exp(self.W_spk)
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(pad_Z, spk_kern).flatten()[:-1]
         
@@ -212,8 +212,8 @@ class VAE_NoHist_GLM2(nn.Module):
         spk_out[-T_data:] = spk_out[-T_data:] + final_spk
         
         t = torch.arange(self.T_no).to(self.device)
-        t_tau = t / self.Tau_spk**2
-        spk_kern = t_tau * torch.exp(-t_tau) * self.W_spk**2
+        t_tau = t / torch.exp(self.Tau_spk)
+        spk_kern = t_tau * torch.exp(-t_tau) * torch.exp(self.W_spk)
         spk_kern = torch.flip(spk_kern, [0]).reshape(1,1,-1)
         spk_filt = F.conv1d(spk_out.reshape(1,1,-1), spk_kern).flatten()[:-1]
         #final_V = spk_filt + self.V_o
