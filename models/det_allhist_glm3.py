@@ -9,8 +9,8 @@ class Det_AllHist_GLM(nn.Module):
         self.C_den = C_den
         self.T_no = T_no
         self.sub_no = C_den.shape[0]
-        self.C_syn_e = C_syn_e
-        self.C_syn_i = C_syn_i
+        #self.C_syn_e = C_syn_e
+        #self.C_syn_i = C_syn_i
         self.device = device
         
         ### Cosine Basis ###
@@ -34,7 +34,7 @@ class Det_AllHist_GLM(nn.Module):
         ### Synaptic Parameters ###
         self.Tau_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(0) , requires_grad=True)
         self.Delta_syn = nn.Parameter(torch.ones(self.sub_no, 2)*0 , requires_grad=True)
-        self.W_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(0) , requires_grad=True)
+        self.W_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(-1) , requires_grad=True)
         #self.W_syn = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no, 2)*(0.01) , requires_grad=True)
        
         ### Spiking Parameters ###
@@ -52,26 +52,32 @@ class Det_AllHist_GLM(nn.Module):
         self.W_out = nn.Parameter(torch.ones(1)*(0.8) , requires_grad=True)
         
         ### C Syn ###
-        #self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, 240)*0.1 , requires_grad=True)
-        #self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, 200)*0.1 , requires_grad=True)
+        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no-1, 299)*0.1 , requires_grad=True)
+        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no-1, 200)*0.1 , requires_grad=True)
         
         self.step = Step.apply
 
     def spike_convolve(self, S_e, S_i):
         T_data = S_e.shape[0]
         
-        """
+        ###
         temp = 0.01
-        C_syn_e_raw = F.softmax(self.C_syn_e_raw/temp, 0)
-        C_syn_i_raw = F.softmax(self.C_syn_i_raw/temp, 0)
-        C_syn_e = torch.zeros(self.sub_no, 240).to(self.device)
+        eps = 1e-8
+        u_e = torch.rand_like(self.C_syn_e_raw)
+        u_i = torch.rand_like(self.C_syn_i_raw)
+        g_e = - torch.log(- torch.log(u_e + eps) + eps)
+        g_i = - torch.log(- torch.log(u_i + eps) + eps)
+        
+        C_syn_e_raw = F.softmax((self.C_syn_e_raw + g_e) / temp, dim=0)
+        C_syn_i_raw = F.softmax((self.C_syn_i_raw + g_i) / temp, dim=0)
+        C_syn_e = torch.zeros(self.sub_no, 299).to(self.device)
         C_syn_i = torch.zeros(self.sub_no, 200).to(self.device)
         C_syn_e[1:,:] = C_syn_e[1:,:] + C_syn_e_raw
         C_syn_i[1:,:] = C_syn_i[1:,:] + C_syn_i_raw
-        """
+        ###
 
-        syn_e = torch.matmul(S_e, self.C_syn_e.T)
-        syn_i = torch.matmul(S_i, self.C_syn_i.T)
+        syn_e = torch.matmul(S_e, C_syn_e.T)
+        syn_i = torch.matmul(S_i, C_syn_i.T)
 
         
         t = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
