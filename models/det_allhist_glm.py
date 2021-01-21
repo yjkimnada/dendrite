@@ -34,7 +34,7 @@ class Det_AllHist_GLM(nn.Module):
         ### Synaptic Parameters ###
         self.Tau_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(0) , requires_grad=True)
         self.Delta_syn = nn.Parameter(torch.ones(self.sub_no, 2)*0 , requires_grad=True)
-        self.W_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(0) , requires_grad=True)
+        self.W_syn = nn.Parameter(torch.ones(self.sub_no, 2)*(-1) , requires_grad=True)
         #self.W_syn = nn.Parameter(torch.randn(self.sub_no, self.cos_basis_no, 2)*(0.01) , requires_grad=True)
        
         ### Spiking Parameters ###
