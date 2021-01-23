@@ -19,7 +19,7 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                 T_no, batch_size, iter_no, epoch_no, C_den, C_syn_e, C_syn_i, 
                 sparse_no, device, lr, save_dir):
 
-    V_train = V[:T_train].to(device).to(device)
+    V_train = V[:T_train].to(device)
     V_test = V[T_train:T_train + T_test].to(device)
     test_E_neural = E_neural[T_train:T_train+T_test].float().to(device)
     test_I_neural = I_neural[T_train:T_train+T_test].float().to(device)
