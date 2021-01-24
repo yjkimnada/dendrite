@@ -3,6 +3,20 @@ from torch import nn
 from torch.nn import functional as F
 
 class SNU_Net(nn.Module):
+    def __init__(self, C_den, C_syn_e, C_syn_i, T_no, 
+            W_syn_init, Decay_init, Thresh_init, Prop_init
+            device):
+        super().__init__()
+
+        self.C_den = C_den
+        self.T_no = T_no
+        self.sub_no = C_den.shape[0]
+        self.C_syn_e = C_syn_e
+        self.C_syn_i = C_syn_i
+        self.device = device
+
+
+class SNU_Net(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i,
                  weight_init, decay_init, threshold_init, prop_init,
                  device):
