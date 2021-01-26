@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class SRM_Root(nn.Module):
+class SRM_Hist_Root(nn.Module):
     def __init__(self, C_den, C_syn_e, C_syn_i, T_no, 
             W_syn_init, 
             Tau_syn_init, 
@@ -36,12 +36,8 @@ class SRM_Root(nn.Module):
             self.cos_basis[i] = self.cos_basis[i] + basis
 
         ### Synaptic Parameters ###
-        self.Tau_syn_e = nn.Parameter(torch.ones(self.sub_no) * Tau_syn_init ,requires_grad=True)
-        self.Tau_syn_i = nn.Parameter(torch.ones(self.sub_no) * Tau_syn_init ,requires_grad=True)
-        self.W_syn_e = nn.Parameter(torch.ones(self.sub_no) * W_syn_init ,requires_grad=False) ### FIXED!
-        self.W_syn_i = nn.Parameter(torch.ones(self.sub_no) * W_syn_init ,requires_grad=True)
-        self.Delta_syn_e = nn.Parameter(torch.ones(self.sub_no) * Delta_syn_init ,requires_grad=True)
-        self.Delta_syn_i = nn.Parameter(torch.ones(self.sub_no) * Delta_syn_init ,requires_grad=True)
+        self.W_syn_e = nn.Parameter(torch.ones(self.sub_no, self.cos_basis_no)*(0.001) ,requires_grad=True)
+        self.W_syn_i = nn.Parameter(torch.ones(self.sub_no, self.cos_basis_no)*(-0.001) ,requires_grad=True)
 
         ### Spiking Parameters ###
         self.W_sub = nn.Parameter(torch.ones(self.sub_no) * 0 ,requires_grad=True)
@@ -60,16 +56,8 @@ class SRM_Root(nn.Module):
         syn_e = torch.matmul(S_e, self.C_syn_e.T)
         syn_i = torch.matmul(S_i, self.C_syn_i.T)
 
-        t = torch.arange(self.T_no).reshape(1,-1).repeat(self.sub_no,1).to(self.device)
-        t_e = t - torch.exp(self.Delta_syn_e.reshape(-1,1))
-        t_i = t - torch.exp(self.Delta_syn_i.reshape(-1,1))
-        t_e[t_e < 0.0] = 0.0
-        t_i[t_i < 0.0] = 0.0
-
-        t_tau_e = t_e / torch.exp(self.Tau_syn_e.reshape(-1,1))
-        t_tau_i = t_i / torch.exp(self.Tau_syn_i.reshape(-1,1))
-        e_kern = t_tau_e * torch.exp(-t_tau_e) * torch.exp(self.W_syn_e.reshape(-1,1))
-        i_kern = t_tau_i * torch.exp(-t_tau_i) * torch.exp(self.W_syn_i.reshape(-1,1))*(-1)
+        e_kern = torch.matmul(self.W_syn_e, self.cos_basis)
+        i_kern = torch.matmul(self.W_syn_i, self.cos_basis)
         e_kern = torch.flip(e_kern, [1]).unsqueeze(1)
         i_kern = torch.flip(i_kern, [1]).unsqueeze(1)
 
