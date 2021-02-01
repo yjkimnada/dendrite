@@ -1,11 +1,4 @@
 from models.alpha_glm import Alpha_GLM
-from models.cos_glm import Cos_GLM
-from models.alpha_cos2_glm import Alpha_Cos2_GLM
-from models.alpha_hist_glm import Alpha_Hist_GLM
-from models.gp_glm import GP_GLM
-from models.gp_hist_glm import GP_Hist_GLM
-from models.alpha_gp_hist_glm import Alpha_GP_Hist_GLM
-from models.alpha_rootspike_glm import Alpha_RootSpike_GLM
 
 import numpy as np
 import torch
@@ -21,10 +14,14 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
 
     V_train = V[:T_train].to(device)
     V_test = V[T_train:T_train + T_test].to(device)
-    test_E_neural = E_neural[T_train:T_train+T_test].float().to(device)
-    test_I_neural = I_neural[T_train:T_train+T_test].float().to(device)
-    train_E_neural = E_neural[:T_train].float().to(device)
-    train_I_neural = I_neural[:T_train].float().to(device)
+    
+    test_E_neural = E_neural[T_train:T_train+T_test].toarray()
+    test_I_neural = I_neural[T_train:T_train+T_test].toarray()
+    test_E_neural = torch.from_numpy(test_E_neural).float().to(device)
+    test_I_neural = torch.from_numpy(test_I_neural).float().to(device)
+    
+    train_E_neural = E_neural[:T_train]
+    train_I_neural = I_neural[:T_train]
     E_no = E_neural.shape[1]
     I_no = I_neural.shape[1]
     C_syn_e = C_syn_e.float().to(device)
@@ -167,9 +164,11 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
         optimizer.zero_grad()
         
         batch_idx = train_idx[i].long()
-        batch_E_neural = train_E_neural[batch_idx : batch_idx+batch_size]
-        batch_I_neural = train_I_neural[batch_idx : batch_idx+batch_size]
-        batch_V = V_train[batch_idx : batch_idx+batch_size]
+        batch_E_neural = train_E_neural[batch_idx : batch_idx+batch_size].toarray()
+        batch_I_neural = train_I_neural[batch_idx : batch_idx+batch_size].toarray()
+        batch_E_neural = torch.from_numpy(batch_E_neural).float().to(device)
+        batch_I_neural = torch.from_numpy(batch_I_neural).float().to(device)
+        batch_V = V_train[batch_idx : batch_idx+batch_size].to(device)
         
         if (model_type == "gp") or (model_type == "gp_hist") or (model_type=="alpha_gp_hist"):
             var_loss, batch_pred, out_filters, C_syn_e, C_syn_i = model(V_ref=batch_V,
@@ -234,12 +233,12 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
                                                                         test=True)
     
     else:
-        train_pred, train_filters, C_syn_e, C_syn_i = model(S_e=train_E_neural,
-                                                                S_i=train_I_neural,
+        train_pred, train_filters, C_syn_e, C_syn_i = model(S_e=torch.from_numpy(train_E_neural[:300000].toarray()).to(device).float(),
+                                                                S_i=torch.from_numpy(train_I_neural[:300000].toarray()).to(device).float(),
                                                                 temp=None,
                                                                 test=True)
     
-    avg_diff = torch.mean(V_train - train_pred).item()
+    avg_diff = torch.mean(V_train[:300000] - train_pred).item()
     
     if (model_type == "gp") or (model_type == "gp_hist") or (model_type=="alpha_gp_hist"):
         old_V_o = model.likelihood.V_o.item()
@@ -278,8 +277,8 @@ def train_glm(model_type, V, E_neural, I_neural, T_train, T_test,
     print(test_score)
     print(np.mean((V_test.cpu().detach().numpy() - test_pred)**2))
 
-    torch.save(model.state_dict(), save_dir+model_type+"_"+"sub"+str(sub_no)+"_diff_model.pt")
-    np.savez(save_dir+model_type+"_"+"sub"+str(sub_no)+"_diff_output.npz",
+    torch.save(model.state_dict(), save_dir+model_type+"_"+"sub"+str(sub_no)+"_model.pt")
+    np.savez(save_dir+model_type+"_"+"sub"+str(sub_no)+"_output.npz",
                     test = test_pred,
                     C_syn_e = C_syn_e,
                     C_syn_i = C_syn_i,
