@@ -20,6 +20,25 @@ def submatrix_index(n, i):
     return I
 
 def get_spanning_tree_marginals(logits, n):
+    u_vertices = torch.triu_indices(n, n, offset=1)
+    l_vertices = torch.triu_indices(n-2, n-2)
+    
+    W = torch.zeros(n, n)
+    W = W.cuda() if logits.is_cuda else W
+    
+    W[u_vertices[0], u_vertices[1]] = torch.exp(logits[:n*(n-1)//2])
+    W[l_vertices[1]+2, l_vertices[0]+1] = torch.exp(logits[n*(n-1)//2:])
+    
+    W = W.T
+    
+    L = torch.diag_embed(W.sum(axis=-1)) - W
+    subL = L[1:,1:]
+    logzs = torch.slogdet(subL)[1]
+    #logzs = torch.sum(logzs + (n - 1) * c.flatten())
+    sample = torch.autograd.grad(logzs, logits, create_graph=True)[0]
+    return sample
+    
+    """
     (i, j) = torch.triu_indices(n, n, offset=1)
     c = torch.max(logits, axis=-1, keepdims=True)[0]
     k = torch.argmax(logits, axis=-1)
@@ -40,6 +59,7 @@ def get_spanning_tree_marginals(logits, n):
     logzs = torch.sum(logzs + (n - 1) * c.flatten())
     sample = torch.autograd.grad(logzs, logits, create_graph=True)[0]
     return sample
+    """
 
 def edmonds_cpp_pytorch(adjs, n):
     """
@@ -118,7 +138,8 @@ def sample_tree_from_logits(logits, tau=1.0, hard=False, max_range=np.inf, devic
     """
 
     # n * (n - 1) = len(logits), where n is the number of vertices.
-    n =  int(0.5 * (1 + np.sqrt(8 * logits.size(0) + 1)))
+    #n =  int(0.5 * (1 + np.sqrt(8 * logits.size(0) + 1)))
+    n = int(np.sqrt(logits.size(0)) + 1)
 
     # Reshape to adjacency matrix (with the diagonals removed).
     #reshaped_logits = logits.view(n, n - 1)
@@ -134,18 +155,18 @@ def sample_tree_from_logits(logits, tau=1.0, hard=False, max_range=np.inf, devic
     """
     edge_weights = logits
     
-    vertices = torch.triu_indices(n, n, offset=1)
+    u_vertices = torch.triu_indices(n, n, offset=1)
+    l_vertices = torch.triu_indices(n-2, n-2)
 
     #hard = True if hard_with_grad else hard
     if hard:
         adj = torch.zeros((n,n)).to(device)
-        #adj[vertices[0], vertices[1]] = torch.exp(edge_weights)
-        #adj[vertices[1], vertices[0]] = torch.exp(edge_weights)
-        #adj[vertices[0], vertices[1]] = edge_weights
-        adj[vertices[1], vertices[0]] = edge_weights
+        adj[u_vertices[0], u_vertices[1]] = torch.exp(edge_weights[:n*(n-1)//2])
+        adj[l_vertices[1]+2, l_vertices[0]+1] = torch.exp(edge_weights[n*(n-1)//2:])
+        #adj[u_vertices[0], u_vertices[1]] = edge_weights[:n*(n-1)//2]
+        #adj[l_vertices[1]+2, l_vertices[0]+1] = edge_weights[n*(n-1)//2:]
         
-        #samples = edmonds_cpp_pytorch(adj, n)
-        heads = edmonds_python(adj.unsqueeze(0), n).flatten()
+        heads = edmonds_python(adj.T.unsqueeze(0), n).flatten()
         
         samples = torch.zeros((n,n)).to(device)
         for col in range(n):
@@ -159,7 +180,11 @@ def sample_tree_from_logits(logits, tau=1.0, hard=False, max_range=np.inf, devic
 
         #samples = torch.zeros_like(reshaped_logits)
         samples = torch.zeros((n,n)).to(device)
-        samples[vertices[0], vertices[1]] = X
+        #samples[vertices[0], vertices[1]] = X
+        
+        samples[u_vertices[0], u_vertices[1]] = X[:n*(n-1)//2]
+        samples[l_vertices[1]+2, l_vertices[0]+1] = X[n*(n-1)//2:]
+        
         #samples[vertices[1], vertices[0]] = X
 
     # Return the flattened sample in the same format as the input logits.
