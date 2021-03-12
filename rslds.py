@@ -16,14 +16,14 @@ class RSLDS(nn.Module):
         self.T = T
         self.R = R
 
-        self.W_zu = nn.Parameter(torch.randn(N, K, K))
-        self.W_zx = nn.Parameter(torch.randn(N, K, K, H))
-        self.W_xx = nn.Parameter(torch.randn(N, K, H, H))
-        self.W_xu = nn.Parameter(torch.randn(N, K, H))
+        self.W_zu = nn.Parameter(torch.randn(N, K, K)*0.01)
+        self.W_zx = nn.Parameter(torch.randn(N, K, K, H)*0.01)
+        self.W_xx = nn.Parameter(torch.randn(N, K, H, H)*0.01)
+        self.W_xu = nn.Parameter(torch.randn(N, K, H)*0.01)
         self.W_yx = nn.Linear(N*H, 1)
 
-        self.b_z = nn.Parameter(torch.randn(N, K, K))
-        self.b_x = nn.Parameter(torch.randn(N, K, H))
+        self.b_z = nn.Parameter(torch.randn(N, K, K)*0.01)
+        self.b_x = nn.Parameter(torch.randn(N, K, H)*0.01)
 
         self.U_scale = nn.Parameter(torch.ones(self.in_no))
         self.Z_init = nn.Parameter(torch.zeros(N, K))
@@ -119,7 +119,12 @@ class RSLDS(nn.Module):
         log_A[:,0,:,:,:] = log_A[:,0,:,:,:] + torch.eye(self.K).to(self.device)
         
         # Calculate B: p(x_t | x_{t-1}, z_t, u_t) Continuous
+        """
         X_est = X_old.unsqueeze(-2) + torch.matmul(self.W_xx.unsqueeze(0).unsqueeze(0) , X_old.unsqueeze(3).unsqueeze(-1)).squeeze(-1) \
+            + self.W_xu.unsqueeze(0).unsqueeze(0) * U.unsqueeze(-1).unsqueeze(-1) \
+            + self.b_x.unsqueeze(0).unsqueeze(0) # (batch, T, N, K, H)
+        """
+        X_est = torch.matmul(self.W_xx.unsqueeze(0).unsqueeze(0) , X_old.unsqueeze(3).unsqueeze(-1)).squeeze(-1) \
             + self.W_xu.unsqueeze(0).unsqueeze(0) * U.unsqueeze(-1).unsqueeze(-1) \
             + self.b_x.unsqueeze(0).unsqueeze(0) # (batch, T, N, K, H)
         
@@ -206,7 +211,11 @@ class RSLDS(nn.Module):
             part_W_xx = torch.sum(self.W_xx*Z_curr.unsqueeze(-1).unsqueeze(-1), 1) # (N,H,H)
             part_b_x = torch.sum(self.b_x*Z_curr.unsqueeze(-1), 1) # (N, H)
             
+            """
             X_curr = X_curr + torch.matmul(part_W_xx, X_curr.unsqueeze(-1)).squeeze(-1) \
+                + part_W_xu*U[t+1].unsqueeze(-1) + part_b_x # (N, H)
+            """
+            X_curr = torch.matmul(part_W_xx, X_curr.unsqueeze(-1)).squeeze(-1) \
                 + part_W_xu*U[t+1].unsqueeze(-1) + part_b_x # (N, H)
             X_out[t+1] = X_curr
             
