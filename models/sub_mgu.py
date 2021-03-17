@@ -6,14 +6,13 @@ from torch.nn.parameter import Parameter
 import torch.nn.functional as F
 
 class Sub_MGU(nn.Module):
-    def __init__(self, sub_no, input_size, hidden_size, bias, device):
+    def __init__(self, sub_no, input_size, hidden_size, device):
         super(Sub_MGU, self).__init__()
         
         self.device = device
         self.sub_no = sub_no
         self.input_size = input_size
         self.hidden_size = hidden_size
-        self.bias = bias
         
         self.W_hin = []
         self.W_hif = []

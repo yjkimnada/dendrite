@@ -25,9 +25,9 @@ class Sub_MGU(nn.Module):
             self.W_hir.append(Parameter(torch.randn(hidden_size)*0.01))
             self.W_hii.append(Parameter(torch.randn(hidden_size)*0.01))
             self.W_hin.append(Parameter(torch.randn(hidden_size)*0.01))
-            self.W_hhr.append(Parameter(torch.randn(hidden_size)*0.01))
-            self.W_hhi.append(Parameter(torch.randn(hidden_size)*0.01))
-            self.W_hhn.append(Parameter(torch.randn(hidden_size)*0.01))
+            self.W_hhr.append(Parameter(torch.randn(hidden_size, hidden_size)*0.01))
+            self.W_hhi.append(Parameter(torch.randn(hidden_size, hidden_size)*0.01))
+            self.W_hhn.append(Parameter(torch.randn(hidden_size, hidden_size)*0.01))
             
         self.bias_ih = Parameter(torch.randn(3*sub_no * hidden_size)*0.01)
         self.bias_hh = Parameter(torch.randn(3*sub_no * hidden_size)*0.01)
@@ -45,10 +45,9 @@ class Sub_MGU(nn.Module):
             W_hi[(s+self.sub_no)*self.hidden_size:(s+self.sub_no+1)*self.hidden_size,s] = W_hi[(s+self.sub_no)*self.hidden_size:(s+self.sub_no+1)*self.hidden_size,s] + self.W_hii[s]
             W_hi[(s+2*self.sub_no)*self.hidden_size:(s+2*self.sub_no+1)*self.hidden_size,s] = W_hi[(s+2*self.sub_no)*self.hidden_size:(s+2*self.sub_no+1)*self.hidden_size,s] + self.W_hin[s]
             
-            hh_idx = torch.arange(s*self.hidden_size,(s+1)*self.hidden_size).to(self.device)
-            W_hh[hh_idx,hh_idx] = W_hh[hh_idx,hh_idx] + self.W_hhr[s]
-            W_hh[hh_idx+self.hidden_size*self.sub_no,hh_idx] = W_hh[hh_idx+self.hidden_size*self.sub_no,hh_idx] + self.W_hhi[s]
-            W_hh[hh_idx+2*self.hidden_size*self.sub_no,hh_idx] = W_hh[hh_idx+self.hidden_size*self.sub_no,hh_idx] + self.W_hhn[s]
+            W_hh[s*self.hidden_size:(s+1)*self.hidden_size, s*self.hidden_size:(s+1)*self.hidden_size] = W_hh[s*self.hidden_size:(s+1)*self.hidden_size, s*self.hidden_size:(s+1)*self.hidden_size] + self.W_hhr[s]
+            W_hh[(s+self.sub_no)*self.hidden_size:(s+self.sub_no+1)*self.hidden_size, s*self.hidden_size:(s+1)*self.hidden_size] = W_hh[(s+self.sub_no)*self.hidden_size:(s+self.sub_no+1)*self.hidden_size, s*self.hidden_size:(s+1)*self.hidden_size] + self.W_hhr[s]
+            W_hh[(s+2*self.sub_no)*self.hidden_size:(s+2*self.sub_no+1)*self.hidden_size, s*self.hidden_size:(s+1)*self.hidden_size] = W_hh[(s+2*self.sub_no)*self.hidden_size:(s+2*self.sub_no+1)*self.hidden_size, s*self.hidden_size:(s+1)*self.hidden_size] + self.W_hhn[s]
         
         for i, input_t in enumerate(torch.split(input_data, 1, 1)):
             
