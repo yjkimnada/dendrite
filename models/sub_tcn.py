@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class Sub_TCN(nn.Module):
-    def __init__(self, C_syn_e, C_syn_i, T_no, layer_no, hid_no, device):
+    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, two_nonlin, device):
         super().__init__()
 
         self.T_no = T_no
@@ -15,10 +15,12 @@ class Sub_TCN(nn.Module):
         self.device = device
         self.hid_no = hid_no
         self.layer_no = layer_no
+        self.two_nonlin = two_nonlin
 
         self.E_scale = nn.Parameter(torch.zeros(self.E_no))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
-
+        
+        """
         tcn = []
         for l in range(layer_no):
             if l == 0:
@@ -30,6 +32,10 @@ class Sub_TCN(nn.Module):
                 tcn.append(nn.Conv1d(hid_no*self.sub_no, hid_no*self.sub_no, 1, groups=self.sub_no))
                 tcn.append(nn.Tanh())
         self.tcn = nn.Sequential(*tcn)
+        """
+        
+        self.W_layer1 = nn.Parameter(torch.randn(self.sub_no*self.hid_no, self.T_no)*0.01)
+        self.W_layer2 = nn.Parameter(torch.zeros(self.sub_no, self.hid_no))
         
         self.W_sub = nn.Parameter(torch.zeros(self.sub_no))
         self.V_o = nn.Parameter(torch.zeros(1))
@@ -56,14 +62,16 @@ class Sub_TCN(nn.Module):
         pad_syn_i = pad_syn_i.permute(0,2,1)
 
         syn_in = pad_syn_e + pad_syn_i
-        sub_out = self.tcn(syn_in).permute(0,2,1)
+        #sub_out = self.tcn(syn_in).permute(0,2,1)
         
-        ###
-        sub_out = torch.tanh(sub_out)
-        final = torch.sum(sub_out * torch.exp(self.W_sub).reshape(1,1,-1), -1)
-        ###
+        layer1_out = F.conv1d(syn_in, self.W_layer1.unsqueeze(1), groups=self.sub_no)
+        sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         
-        #final = torch.sum(sub_out, -1)
+        if self.two_nonlin == True:
+            sub_out = torch.tanh(sub_out)
+            final = torch.sum(sub_out * torch.exp(self.W_sub).reshape(1,1,-1), -1)
+        elif self.two_nonlin == False:
+            final = torch.sum(sub_out, -1)
 
         return final
 
