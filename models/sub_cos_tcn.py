@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class Sub_Cos_TCN(nn.Module):
-    def __init__(self, C_syn_e, C_syn_i, T_no, layer_no, hid_no, device):
+    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, two_nonlin, device):
         super().__init__()
 
         self.T_no = T_no
@@ -14,7 +14,7 @@ class Sub_Cos_TCN(nn.Module):
         self.C_syn_i = C_syn_i
         self.device = device
         self.hid_no = hid_no
-        self.layer_no = layer_no
+        self.two_nonlin = two_nonlin
 
         self.E_scale = nn.Parameter(torch.zeros(self.E_no))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
@@ -37,8 +37,11 @@ class Sub_Cos_TCN(nn.Module):
             basis[raw_cos > xmax] = 0.0
             self.kern_basis[i] = basis
         
-        self.kern_weights = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
-        self.sub_comb_weights = nn.Parameter(torch.zeros(self.sub_no*hid_no))
+        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
+        self.W_i_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
+        self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
+        self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
+        #self.b_layer2 = nn.Parameter(torch.zeros(self.sub_no))
 
         self.V_o = nn.Parameter(torch.zeros(1))
         
@@ -62,21 +65,24 @@ class Sub_Cos_TCN(nn.Module):
         pad_syn_i[:,-T_data:] = pad_syn_i[:,-T_data:] + syn_i
         pad_syn_e = pad_syn_e.permute(0,2,1)
         pad_syn_i = pad_syn_i.permute(0,2,1)
-
-        syn_in = pad_syn_e + pad_syn_i
         
-        kern = torch.matmul(self.kern_weights, self.kern_basis) # (sub*H, T_no)
-        kern = torch.flip(kern, [1]).unsqueeze(1)
+        layer1_e_kern = torch.matmul(self.W_e_layer1, self.kern_basis) # (sub*H, T_no)
+        layer1_i_kern = torch.matmul(self.W_i_layer1, self.kern_basis) # (sub*H, T_no)
+        layer1_e_kern = torch.flip(layer1_e_kern, [1]).unsqueeze(1)
+        layer1_i_kern = torch.flip(layer1_i_kern, [1]).unsqueeze(1)
         
-        kern_out = F.conv1d(syn_in, kern, groups=self.sub_no).permute(0,2,1) # (batch, T, sub*H)
-        sub_comb = kern_out.reshape(-1, self.sub_no*self.hid_no) * torch.exp(self.sub_comb_weights).reshape(1,-1)
+        layer1_e_conv = F.conv1d(pad_syn_e, layer1_e_kern, groups=self.sub_no)
+        layer1_i_conv = F.conv1d(pad_syn_i, layer1_i_kern, groups=self.sub_no)
+        layer1_out = torch.tanh(layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1))
         
-        sub_out = torch.matmul(sub_comb, self.comb_sum_mat.T).reshape(batch, T_data, self.sub_no)
-        # SECOND NONLIN AT SUBUNIT OUTPUT ?!?!?!
-        # sub_out = torch.tanh(sub_out) * MORE WEIGHTS?!
+        sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         
-        final = torch.sum(sub_out, -1)
+        if self.two_nonlin == True:
+            sub_out = torch.tanh(sub_out + self.b_layer2.reshape(1,1,-1))
+            final = torch.sum(sub_out * torch.exp(self.W_sub).reshape(1,1,-1), -1) + self.V_o
+        elif self.two_nonlin == False:
+            final = torch.sum(sub_out, -1) + self.V_o
 
         return final
-
+        
 
