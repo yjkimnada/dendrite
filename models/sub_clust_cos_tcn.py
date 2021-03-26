@@ -55,6 +55,8 @@ class Sub_Clust_Cos_TCN(nn.Module):
         
         C_syn_e = F.softmax(self.C_syn_e_raw / temp, 0)
         C_syn_i = F.softmax(self.C_syn_i_raw / temp, 0)
+        log_C_syn_e = F.log_softmax(self.C_syn_e_raw / temp, 0)
+        log_C_syn_i = F.log_softmax(self.C_syn_i_raw / temp, 0)
 
         S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
         S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1)) * (-1)
@@ -81,6 +83,6 @@ class Sub_Clust_Cos_TCN(nn.Module):
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         final = torch.sum(sub_out, -1) + self.V_o
 
-        return final, C_syn_e, C_syn_i
+        return final, C_syn_e, C_syn_i, log_C_syn_e, log_C_syn_i
         
 
