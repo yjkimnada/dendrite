@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class Sub_Cos_TCN(nn.Module):
+class Sub_Cos_GLM(nn.Module):
     def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, two_nonlin, device):
         super().__init__()
 

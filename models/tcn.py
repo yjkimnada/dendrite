@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class TCN(nn.Module):
-    def __init__(self, C_syn_e, C_syn_i, T_no, layer_no, hid_no, device):
+    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, layer_no, device):
         super().__init__()
 
         self.T_no = T_no
@@ -54,5 +54,3 @@ class TCN(nn.Module):
         final = self.tcn(syn_in).squeeze(1)
 
         return final
-
-

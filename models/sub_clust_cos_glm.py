@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 
-class Sub_Clust_Cos_TCN(nn.Module):
+class Sub_Clust_Cos_GLM(nn.Module):
     def __init__(self, sub_no, E_no, I_no, T_no, hid_no, device):
         super().__init__()
 
