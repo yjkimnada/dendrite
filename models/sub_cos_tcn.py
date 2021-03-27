@@ -55,7 +55,7 @@ class Sub_Cos_TCN(nn.Module):
         batch = S_e.shape[0]
 
         S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
-        S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1)) * (-1)
+        S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1))
         syn_e = torch.matmul(S_e, self.C_syn_e.T.unsqueeze(0))
         syn_i = torch.matmul(S_i, self.C_syn_i.T.unsqueeze(0))
 
@@ -73,8 +73,8 @@ class Sub_Cos_TCN(nn.Module):
         
         layer1_e_conv = F.conv1d(pad_syn_e, layer1_e_kern, groups=self.sub_no)
         layer1_i_conv = F.conv1d(pad_syn_i, layer1_i_kern, groups=self.sub_no)
-        #layer1_out = torch.tanh(layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1))
-        layer1_out = torch.tanh(layer1_e_conv + self.b_layer1.reshape(1,-1,1))
+        layer1_out = torch.tanh(layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1))
+        #layer1_out = torch.tanh(layer1_e_conv + self.b_layer1.reshape(1,-1,1))
         
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         
