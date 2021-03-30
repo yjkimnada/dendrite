@@ -1,8 +1,9 @@
 import torch
 from torch import nn
 from torch.nn import functional as F
+from math import sqrt
 
-class Sub_Clust_Cos_GLM(nn.Module):
+class Sub_Sparse_Clust_Cos_GLM(nn.Module):
     def __init__(self, sub_no, E_no, I_no, T_no, hid_no, device):
         super().__init__()
 
@@ -39,20 +40,62 @@ class Sub_Clust_Cos_GLM(nn.Module):
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
         
-        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.01)
-        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.01)
+        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.01+1/self.sub_no)
+        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.01+1/self.sub_no)
         
         self.V_o = nn.Parameter(torch.zeros(1))
+        
+    
+    def sparsemax(self, v, z=1):
+        v_sorted, _ = torch.sort(v, dim=0, descending=True)
+        cssv = torch.cumsum(v_sorted, dim=0) - z
+        ind = torch.arange(1, 1 + len(v)).float().to(v.device)
+        cond = v_sorted - cssv / ind > 0
+        rho = ind.masked_select(cond)[-1]
+        tau = cssv.masked_select(cond)[-1] / rho
+        w = torch.clamp(v - tau, min=0)
+        return w / z
 
-    def forward(self, S_e, S_i, temp):
+
+    def sparsestmax(self, v, rad_in=0, u_in=None):
+        w = self.sparsemax(v)
+        if max(w) - min(w) == 1:
+            return w
+        ind = torch.tensor(w > 0).float()
+        u = ind / torch.sum(ind)
+        if u_in is None:
+            rad = rad_in
+        else:
+            rad = sqrt(rad_in ** 2 - torch.sum((u - u_in) ** 2))
+        distance = torch.norm(w - u)
+        if distance >= rad:
+            return w
+        p = rad * (w - u) / distance + u
+        if min(p) < 0:
+            return self.sparsestmax(p, rad, u)
+        return p.clamp_(min=0, max=1)
+
+    def forward(self, S_e, S_i, rad ,test):
         # S is (batch, T, E)
         T_data = S_e.shape[1]
         batch = S_e.shape[0]
         
-        C_syn_e = F.softmax(self.C_syn_e_raw / temp, 0)
-        C_syn_i = F.softmax(self.C_syn_i_raw / temp, 0)
-        log_C_syn_e = F.log_softmax(self.C_syn_e_raw / temp, 0)
-        log_C_syn_i = F.log_softmax(self.C_syn_i_raw / temp, 0)
+        C_syn_e = torch.zeros_like(self.C_syn_e_raw).to(self.device)
+        C_syn_i = torch.zeros_like(self.C_syn_i_raw).to(self.device)
+        if test == False:
+            for e in range(self.E_no):
+                part_e = self.sparsestmax(self.C_syn_e_raw[:,e], rad)
+                C_syn_e[:,e] = C_syn_e[:,e] + part_e
+            for i in range(self.I_no):
+                part_i = self.sparsestmax(self.C_syn_i_raw[:,i], rad)
+                C_syn_i[:,i] = C_syn_i[:,i] + part_i
+        elif test == True:
+            for e in range(self.E_no):
+                e_idx = torch.argmax(self.C_syn_e_raw[:,e])
+                C_syn_e[e_idx,e] = 1
+            for i in range(self.I_no):
+                i_idx = torch.argmax(self.C_syn_i_raw[:,i])
+                C_syn_i[i_idx,i] = 1
 
         S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
         S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1))
@@ -79,6 +122,6 @@ class Sub_Clust_Cos_GLM(nn.Module):
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         final = torch.sum(sub_out, -1) + self.V_o
 
-        return final, C_syn_e, C_syn_i, log_C_syn_e, log_C_syn_i
+        return final, C_syn_e, C_syn_i
         
 
