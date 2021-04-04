@@ -37,8 +37,8 @@ class Sub_Cos_GLM(nn.Module):
             basis[raw_cos > xmax] = 0.0
             self.kern_basis[i] = basis
         
-        self.W_e_layer1 = nn.Parameter(torch.zeros(self.sub_no*hid_no , self.cos_basis_no))
-        self.W_i_layer1 = nn.Parameter(torch.zeros(self.sub_no*hid_no , self.cos_basis_no))
+        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
+        self.W_i_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
 
@@ -83,6 +83,6 @@ class Sub_Cos_GLM(nn.Module):
         if self.two_nonlin == False:
             final = torch.sum(sub_out, -1) + self.V_o
 
-        return final
+        return final, sub_out
         
 

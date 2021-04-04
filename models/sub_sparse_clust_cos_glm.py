@@ -35,13 +35,13 @@ class Sub_Sparse_Clust_Cos_GLM(nn.Module):
             basis[raw_cos > xmax] = 0.0
             self.kern_basis[i] = basis
         
-        self.W_e_layer1 = nn.Parameter(torch.zeros(self.sub_no*hid_no , self.cos_basis_no))
-        self.W_i_layer1 = nn.Parameter(torch.zeros(self.sub_no*hid_no , self.cos_basis_no))
+        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
+        self.W_i_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
         
-        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.01+1/self.sub_no)
-        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.01+1/self.sub_no)
+        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.1+1/self.sub_no)
+        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.1+1/self.sub_no)
         
         self.V_o = nn.Parameter(torch.zeros(1))
         

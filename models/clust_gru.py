@@ -22,8 +22,8 @@ class Clust_GRU(nn.Module):
             self.linear.append(nn.Linear(self.H_no, 1))
 
         self.V_o = nn.Parameter(torch.zeros(1))
-        self.C_syn_e_raw = nn.Parameter(torch.zeros(sub_no, E_no))
-        self.C_syn_i_raw = nn.Parameter(torch.zeros(sub_no, I_no))
+        self.C_syn_e_raw = nn.Parameter(torch.randn(sub_no, E_no)*0.01)
+        self.C_syn_i_raw = nn.Parameter(torch.randn(sub_no, I_no)*0.01)
         
     def forward(self, S_e, S_i, temp):
         T_data = S_e.shape[1]
@@ -34,8 +34,8 @@ class Clust_GRU(nn.Module):
         C_syn_e = F.softmax(self.C_syn_e_raw/temp, 0)
         C_syn_i = F.softmax(self.C_syn_i_raw/temp, 0)
         
-        S_e_sub = torch.matmul(S_e, self.C_syn_e.T.unsqueeze(0))
-        S_i_sub = torch.matmul(S_i, self.C_syn_i.T.unsqueeze(0))
+        S_e_sub = torch.matmul(S_e, C_syn_e.T.unsqueeze(0))
+        S_i_sub = torch.matmul(S_i, C_syn_i.T.unsqueeze(0))
         S_sub = S_e_sub + S_i_sub
         
         sub_out = torch.zeros(batch_size, T_data, self.sub_no).to(self.device)
