@@ -37,11 +37,11 @@ class Sub_Cos_GLM(nn.Module):
             basis[raw_cos > xmax] = 0.0
             self.kern_basis[i] = basis
         
-        #self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
-        W_e_layer1 = torch.ones(self.sub_no*hid_no , self.cos_basis_no)*0.01
-        e_idx = torch.arange(1,self.sub_no*hid_no,hid_no).to(device)
-        W_e_layer1[e_idx] *= -1
-        self.W_e_layer1 = nn.Parameter(W_e_layer1)
+        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
+        #W_e_layer1 = torch.ones(self.sub_no*hid_no , self.cos_basis_no)*0.01
+        #e_idx = torch.arange(1,self.sub_no*hid_no,hid_no).to(device)
+        #W_e_layer1[e_idx] *= -1
+        #self.W_e_layer1 = nn.Parameter(W_e_layer1)
         
         self.W_i_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
