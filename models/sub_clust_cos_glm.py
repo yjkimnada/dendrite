@@ -56,8 +56,6 @@ class Sub_Clust_Cos_GLM(nn.Module):
         
         C_syn_e = F.softmax(self.C_syn_e_raw / temp, 0)
         C_syn_i = F.softmax(self.C_syn_i_raw / temp, 0)
-        log_C_syn_e = F.log_softmax(self.C_syn_e_raw / temp, 0)
-        log_C_syn_i = F.log_softmax(self.C_syn_i_raw / temp, 0)
 
         S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
         S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1))
@@ -86,6 +84,6 @@ class Sub_Clust_Cos_GLM(nn.Module):
         
         out_kern = torch.matmul(self.W_e_layer1, self.kern_basis)
 
-        return final, sub_out, C_syn_e, C_syn_i, log_C_syn_e, log_C_syn_i, out_kern
+        return final, sub_out, C_syn_e, C_syn_i
         
 
