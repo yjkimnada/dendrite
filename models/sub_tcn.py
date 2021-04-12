@@ -19,12 +19,11 @@ class Sub_TCN(nn.Module):
         self.E_scale = nn.Parameter(torch.zeros(self.E_no))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
         
-        self.W_layer1 = nn.Parameter(torch.randn(self.sub_no*self.hid_no, self.T_no)*0.01)
+        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.T_no)*0.01)        
+        self.W_i_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.T_no)*0.01)
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
-        self.b_layer2 = nn.Parameter(torch.zeros(self.sub_no))
         
-        self.W_sub = nn.Parameter(torch.zeros(self.sub_no))
         self.V_o = nn.Parameter(torch.zeros(1))
 
     def forward(self, S_e, S_i):
@@ -44,18 +43,15 @@ class Sub_TCN(nn.Module):
         pad_syn_e = pad_syn_e.permute(0,2,1)
         pad_syn_i = pad_syn_i.permute(0,2,1)
 
-        syn_in = pad_syn_e + pad_syn_i
+        layer1_e_kern = torch.flip(self.W_e_layer1, [1]).unsqueeze(1)
+        layer1_i_kern = torch.flip(self.W_i_layer1, [1]).unsqueeze(1)
+        layer1_e_conv = F.conv1d(pad_syn_e, layer1_e_kern, groups=self.sub_no)
+        layer1_i_conv = F.conv1d(pad_syn_i, layer1_i_kern, groups=self.sub_no)
+        layer1_out = torch.tanh(layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1))
         
-        layer1_conv = F.conv1d(syn_in, self.W_layer1.unsqueeze(1), groups=self.sub_no)
-        layer1_out = torch.tanh(layer1_conv + self.b_layer1.reshape(1,-1,1))
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
-        
-        if self.two_nonlin == True:
-            sub_out = torch.tanh(sub_out + self.b_layer2.reshape(1,1,-1))
-            final = torch.sum(sub_out * torch.exp(self.W_sub).reshape(1,1,-1), -1) + self.V_o
-        elif self.two_nonlin == False:
-            final = torch.sum(sub_out, -1) + self.V_o
+        final = torch.sum(sub_out, -1) + self.V_o
 
-        return final
+        return final, sub_out
 
 

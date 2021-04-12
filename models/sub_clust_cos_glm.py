@@ -34,12 +34,7 @@ class Sub_Clust_Cos_GLM(nn.Module):
             basis[raw_cos > xmax] = 0.0
             self.kern_basis[i] = basis
         
-        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
-        #W_e_layer1 = torch.ones(self.sub_no*hid_no , self.cos_basis_no)*0.01
-        #e_idx = torch.arange(1,self.sub_no*hid_no,hid_no).to(device)
-        #W_e_layer1[e_idx] *= -1
-        #self.W_e_layer1 = nn.Parameter(W_e_layer1)
-        
+        self.W_e_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)        
         self.W_i_layer1 = nn.Parameter(torch.randn(self.sub_no*hid_no , self.cos_basis_no)*0.01)
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
@@ -77,12 +72,9 @@ class Sub_Clust_Cos_GLM(nn.Module):
         layer1_e_conv = F.conv1d(pad_syn_e, layer1_e_kern, groups=self.sub_no)
         layer1_i_conv = F.conv1d(pad_syn_i, layer1_i_kern, groups=self.sub_no)
         layer1_out = torch.tanh(layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1))
-        #layer1_out = torch.tanh(layer1_e_conv + self.b_layer1.reshape(1,-1,1))
         
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         final = torch.sum(sub_out, -1) + self.V_o
-        
-        out_kern = torch.matmul(self.W_e_layer1, self.kern_basis)
 
         return final, sub_out, C_syn_e, C_syn_i
         
