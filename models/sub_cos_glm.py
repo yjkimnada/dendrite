@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class Sub_Cos_GLM(nn.Module):
-    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, two_nonlin, device):
+    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, device):
         super().__init__()
 
         self.T_no = T_no
@@ -14,13 +14,12 @@ class Sub_Cos_GLM(nn.Module):
         self.C_syn_i = C_syn_i
         self.device = device
         self.hid_no = hid_no
-        self.two_nonlin = two_nonlin
 
         self.E_scale = nn.Parameter(torch.zeros(self.E_no))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
         
-        self.cos_basis_no = 24
-        self.scale = 6
+        self.cos_basis_no = 30
+        self.scale = 7.5
         self.shift = 1
         
         self.kern_basis = torch.zeros(self.cos_basis_no, T_no).to(device)
@@ -81,13 +80,9 @@ class Sub_Cos_GLM(nn.Module):
         #layer1_out = torch.tanh(layer1_e_conv + self.b_layer1.reshape(1,-1,1))
         
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
-        
-        #if self.two_nonlin == True:
-            #sub_out = torch.tanh(sub_out + self.b_layer2.reshape(1,1,-1))
-            #final = torch.sum(sub_out * torch.exp(self.W_sub).reshape(1,1,-1), -1) + self.V_o
-        if self.two_nonlin == False:
-            final = torch.sum(sub_out, -1) + self.V_o
+        final = torch.sum(sub_out, -1) + self.V_o
+        layer1_in = layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1)
 
-        return final, sub_out
+        return final, sub_out, layer1_in
         
 

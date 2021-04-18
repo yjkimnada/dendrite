@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class Sub_TCN(nn.Module):
-    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, two_nonlin, device):
+    def __init__(self, C_syn_e, C_syn_i, T_no, hid_no, device):
         super().__init__()
 
         self.T_no = T_no
@@ -14,7 +14,6 @@ class Sub_TCN(nn.Module):
         self.C_syn_i = C_syn_i
         self.device = device
         self.hid_no = hid_no
-        self.two_nonlin = two_nonlin
 
         self.E_scale = nn.Parameter(torch.zeros(self.E_no))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
@@ -51,7 +50,8 @@ class Sub_TCN(nn.Module):
         
         sub_out = F.conv1d(layer1_out, torch.exp(self.W_layer2).unsqueeze(-1), groups=self.sub_no).permute(0,2,1)
         final = torch.sum(sub_out, -1) + self.V_o
+        layer1_in = layer1_e_conv + layer1_i_conv + self.b_layer1.reshape(1,-1,1)
 
-        return final, sub_out
+        return final, sub_out, layer1_in
 
 
