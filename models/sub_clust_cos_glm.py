@@ -39,18 +39,27 @@ class Sub_Clust_Cos_GLM(nn.Module):
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
         
-        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.001)
-        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.001)
+        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.01)
+        self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.01)
         
         self.V_o = nn.Parameter(torch.zeros(1))
 
-    def forward(self, S_e, S_i, temp):
+    def forward(self, S_e, S_i, temp, test):
         # S is (batch, T, E)
         T_data = S_e.shape[1]
         batch = S_e.shape[0]
         
-        C_syn_e = F.softmax(self.C_syn_e_raw / temp, 0)
-        C_syn_i = F.softmax(self.C_syn_i_raw / temp, 0)
+        if test == True:
+            C_syn_e = F.softmax(self.C_syn_e_raw / temp, 0)
+            C_syn_i = F.softmax(self.C_syn_i_raw / temp, 0)
+        elif test == False:
+            eps = 1e-8
+            u_e = torch.rand_like(self.C_syn_e_raw)
+            u_i = torch.rand_like(self.C_syn_i_raw)
+            g_e = - torch.log(- torch.log(u_e + eps) + eps)
+            g_i = - torch.log(- torch.log(u_i + eps) + eps)
+            C_syn_e = F.softmax((self.C_syn_e_raw + g_e) / temp, 0)
+            C_syn_i = F.softmax((self.C_syn_i_raw + g_i) / temp, 0)
 
         S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
         S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1))
