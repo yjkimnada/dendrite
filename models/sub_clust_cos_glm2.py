@@ -3,7 +3,7 @@ from torch import nn
 from torch.nn import functional as F
 
 class Sub_Clust_Cos_GLM(nn.Module):
-    def __init__(self, sub_no, E_no, I_no, T_no, hid_no, device):
+    def __init__(self, sub_no, E_no, I_no, T_no, hid_no, clust_idx, rest_idx, device):
         super().__init__()
 
         self.T_no = T_no
@@ -12,8 +12,16 @@ class Sub_Clust_Cos_GLM(nn.Module):
         self.I_no = I_no
         self.device = device
         self.hid_no = hid_no
-
-        self.E_scale = nn.Parameter(torch.zeros(self.E_no))
+        self.clust_idx = clust_idx
+        self.clust_no = clust_idx.shape[0]
+        self.rest_idx = rest_idx
+        self.rest_no = rest_idx.shape[0]
+        
+        #E_scale_raw = torch.ones(self.E_no) * (-1)
+        #E_scale_raw[clust_idx] = 1
+        #self.E_scale = nn.Parameter(E_scale_raw)
+        self.E_scale_clust = nn.Parameter(torch.ones(self.clust_no) * (0))
+        self.E_scale_rest = nn.Parameter(torch.ones(self.rest_no) * (0))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
         
         self.cos_basis_no = 24
@@ -39,41 +47,41 @@ class Sub_Clust_Cos_GLM(nn.Module):
         self.W_layer2 = nn.Parameter(torch.ones(self.sub_no, self.hid_no)*(-1))
         self.b_layer1 = nn.Parameter(torch.zeros(self.sub_no*self.hid_no))
         
-        self.C_syn_e_raw = nn.Parameter(torch.randn(self.sub_no, self.E_no)*0.01)
+        self.C_syn_e_clust_raw = nn.Parameter(torch.randn(self.sub_no, self.clust_no)*0.01)
+        self.C_syn_e_rest_raw = nn.Parameter(torch.randn(self.sub_no, self.rest_no)*0.01)
         self.C_syn_i_raw = nn.Parameter(torch.randn(self.sub_no, self.I_no)*0.01)
         
         self.V_o = nn.Parameter(torch.zeros(1))
         self.custom_softmax = CustomSoftmax.apply
 
-    def forward(self, S_e, S_i, temp, test, g_e, g_i):
+    def forward(self, S_e, S_i, temp, test, it):
         # S is (batch, T, E)
         T_data = S_e.shape[1]
         batch = S_e.shape[0]
         
+        C_syn_e_raw = torch.zeros(self.sub_no, self.E_no).to(self.device)
+        C_syn_e_raw[:,self.clust_idx] = C_syn_e_raw[:,self.clust_idx] + self.C_syn_e_clust_raw
+        C_syn_e_raw[:,self.rest_idx] = C_syn_e_raw[:,self.rest_idx] + self.C_syn_e_rest_raw
+        
         if test == True:
-            C_syn_e = F.softmax(self.C_syn_e_raw * 10000,0)
+            C_syn_e = F.softmax(C_syn_e_raw * 10000,0)
             C_syn_i = F.softmax(self.C_syn_i_raw * 10000,0)
         elif test == False:
-            #eps = 1e-8
-            #u_e = torch.rand_like(self.C_syn_e_raw)
-            #u_i = torch.rand_like(self.C_syn_i_raw)
-            #g_e = - torch.log(- torch.log(u_e + eps) + eps)
-            #g_i = - torch.log(- torch.log(u_i + eps) + eps)
+            C_syn_e = self.custom_softmax((C_syn_e_raw))
+            C_syn_i = self.custom_softmax((self.C_syn_i_raw))
+            #C_syn_e = F.softmax(C_syn_e_raw / temp, 0)
+            #C_syn_i = F.softmax(self.C_syn_i_raw / temp, 0)
             
-            ##C_syn_e = F.softmax((self.C_syn_e_raw + g_e), 0)
-            ##C_syn_i = F.softmax((self.C_syn_i_raw + g_i), 0)
-            #C_syn_e = F.softmax((self.C_syn_e_raw + g_e) / temp, 0)
-            #C_syn_i = F.softmax((self.C_syn_i_raw + g_i) / temp, 0)
-            #C_syn_e = self.custom_softmax(self.C_syn_e_raw / temp)
-            #C_syn_i = self.custom_softmax(self.C_syn_i_raw / temp)
-            #C_syn_e = self.custom_softmax(self.C_syn_e_raw)
-            #C_syn_i = self.custom_softmax(self.C_syn_i_raw)
-            #C_syn_e = self.custom_softmax((self.C_syn_e_raw + g_e) / temp)
-            #C_syn_i = self.custom_softmax((self.C_syn_i_raw + g_i) / temp)
-            C_syn_e = self.custom_softmax((self.C_syn_e_raw + g_e))
-            C_syn_i = self.custom_softmax((self.C_syn_i_raw + g_i))
+        E_scale = torch.zeros(self.E_no).to(self.device)
+        E_scale[self.clust_idx] = E_scale[self.clust_idx] + torch.exp(self.E_scale_clust)
+        if it >= 3499:
+            E_scale[self.rest_idx] = E_scale[self.rest_idx] + torch.exp(self.E_scale_rest)
+        elif it < 3499:
+            mask = torch.zeros_like(C_syn_e_raw)
+            mask[:,self.clust_idx] = 1
+            C_syn_e_raw = C_syn_e_raw * mask
 
-        S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
+        S_e = S_e * torch.exp(E_scale.reshape(1,1,-1))
         S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1))
         syn_e = torch.matmul(S_e, C_syn_e.T.unsqueeze(0))
         syn_i = torch.matmul(S_i, C_syn_i.T.unsqueeze(0))
@@ -104,7 +112,7 @@ class CustomSoftmax(torch.autograd.Function):
     @staticmethod
     def forward(ctx, input):
         ctx.save_for_backward(input)
-        return F.softmax(input * 1000, 0)
+        return F.softmax(input * 10000, 0)
     
     def backward(ctx, grad_output):
         input, = ctx.saved_tensors
