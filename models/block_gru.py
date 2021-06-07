@@ -16,12 +16,8 @@ class Block_GRU(nn.Module):
         
         self.E_scale = nn.Parameter(torch.zeros(self.E_no))
         self.I_scale = nn.Parameter(torch.zeros(self.I_no))
-        
-        self.rnn = nn.ModuleList()
-        self.linear = nn.ModuleList()
-        for s in range(self.sub_no):
-            self.rnn.append(nn.GRU(1, self.H_no, batch_first=True))
-            self.linear.append(nn.Linear(self.H_no, 1))
+        self.rnn = nn.GRU(self.sub_no, self.H_no, batch_first=True)
+        self.linear = nn.Linear(self.H_no, 1)
 
         self.V_o = nn.Parameter(torch.zeros(1))
         
@@ -35,13 +31,8 @@ class Block_GRU(nn.Module):
         S_i_sub = torch.matmul(S_i, self.C_syn_i.T.unsqueeze(0))
         S_sub = S_e_sub + S_i_sub
         
-        sub_out = torch.zeros(batch_size, T_data, self.sub_no).to(self.device)
+        rnn_out, _ = self.rnn(S_sub)
+        lin_out = self.linear(rnn_out.reshape(-1,self.H_no)).reshape(batch_size, T_data)
+        final = lin_out + self.V_o
         
-        for s in range(self.sub_no):
-            rnn_out, _ = self.rnn[s](S_sub[:,:,s].unsqueeze(2))
-            lin_out = self.linear[s](rnn_out.reshape(-1,self.H_no)).reshape(batch_size, T_data)
-            sub_out[:,:,s] = sub_out[:,:,s] + lin_out
-
-        final = torch.sum(sub_out, 2) + self.V_o
-        
-        return final, sub_out
+        return final
