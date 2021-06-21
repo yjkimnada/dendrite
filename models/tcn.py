@@ -23,12 +23,12 @@ class TCN(nn.Module):
         for l in range(layer_no):
             if l == 0:
                 tcn.append(nn.Conv1d(self.sub_no, hid_no, T_no))
-                tcn.append(nn.Tanh())
+                tcn.append(nn.LeakyReLU())
             elif l == layer_no-1:
                 tcn.append(nn.Conv1d(hid_no, 1, 1))
             else:
                 tcn.append(nn.Conv1d(hid_no, hid_no, 1))
-                tcn.append(nn.Tanh())
+                tcn.append(nn.LeakyReLU())
         self.tcn = nn.Sequential(*tcn)
 
         self.V_o = nn.Parameter(torch.zeros(1))
