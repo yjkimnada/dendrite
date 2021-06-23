@@ -32,15 +32,15 @@ class AP_GRU_Lag(nn.Module):
 batch_size = 20
 batch_length = int(50000 / 5 / 0.2)
 H_no = 40
-device = torch.device("cuda:0")
+device = torch.device("cuda:2")
 lag = 20
 
 epoch_no = 400
 iter_no = epoch_no * 980 // batch_size
 
-V = np.load("/scratch/yjk27/CA1_clust4-60/data/vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy").reshape(-1,50001)[:,:50000]
+#V = np.load("/scratch/yjk27/CA1_clust4-60_noNA/data/vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy").reshape(-1,50001)[:,:50000]
 #V = np.load("/scratch/yjk27/CA1_clust4-60_AP/data/V_diff_stimseed1.npy").reshape(-1,batch_length)
-#V = np.load("/scratch/yjk27/CA1_clust4-60_AP/comb_pred/V_comb_pred_2ms.npy").reshape(-1,batch_length)
+V = np.load("/scratch/yjk27/CA1_clust4-60_AP/nona_pred/V_nona_pred_0.2ms.npy").reshape(-1,batch_length)
 #V = np.load("/scratch/yjk27/CA1_clust4-60_AP/diff_true/V_diff_true_0.2ms.npy").reshape(-1,batch_length)
 S = np.load("/scratch/yjk27/CA1_clust4-60_AP/data/spike_train_0.2ms.npy").reshape(-1,batch_length)
 
@@ -116,5 +116,5 @@ for i in tnrange(iter_no):
         
         score_list.append(test_loss)
         print(i, test_loss, step_time)
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_AP/na_true/gru_l20_h40_0.2ms_i"+str(i)+".pt")
-        np.save("/scratch/yjk27/CA1_clust4-60_AP/na_true/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_AP/nona_pred/gru_l20_h40_0.2ms_i"+str(i)+".pt")
+        np.save("/scratch/yjk27/CA1_clust4-60_AP/nona_pred/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
