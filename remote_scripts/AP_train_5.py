@@ -42,7 +42,7 @@ iter_no = epoch_no * 980 // batch_size
 #V = np.load("/scratch/yjk27/CA1_clust4-60_AP/data/V_diff_stimseed1.npy").reshape(-1,batch_length)
 V = np.load("/scratch/yjk27/CA1_clust4-60_AP/nona_pred/V_nona_pred_0.2ms.npy").reshape(-1,batch_length)
 #V = np.load("/scratch/yjk27/CA1_clust4-60_AP/diff_true/V_diff_true_0.2ms.npy").reshape(-1,batch_length)
-S = np.load("/scratch/yjk27/CA1_clust4-60_AP/data/spike_train_0.2ms.npy").reshape(-1,batch_length)
+S = np.load("/scratch/yjk27/CA1_clust4-60_aSoma/data/spike_train_0.2ms.npy").reshape(-1,batch_length)
 
 V-= np.mean(V)
 
@@ -116,5 +116,5 @@ for i in tnrange(iter_no):
         
         score_list.append(test_loss)
         print(i, test_loss, step_time)
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_AP/nona_pred/gru_l20_h40_0.2ms_i"+str(i)+".pt")
-        np.save("/scratch/yjk27/CA1_clust4-60_AP/nona_pred/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_aSoma/nona_pred/gru_l20_h40_0.2ms_i"+str(i)+".pt")
+        np.save("/scratch/yjk27/CA1_clust4-60_aSoma/nona_pred/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
