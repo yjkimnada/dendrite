@@ -116,5 +116,5 @@ for i in tnrange(15000):
         
         score_list.append(test_loss)
         print(i, test_loss, step_time)
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_AP/1.5noise3/gru_l20_h40_0.2ms_i"+str(i)+".pt")
-        np.save("/scratch/yjk27/CA1_clust4-60_AP/1.5noise3/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_AP/na_true_1.5noise3/gru_l20_h40_0.2ms_i"+str(i)+".pt")
+        np.save("/scratch/yjk27/CA1_clust4-60_AP/na_true_1.5noise3/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
