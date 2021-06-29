@@ -32,7 +32,7 @@ class AP_GRU_Lag(nn.Module):
 batch_size = 20
 batch_length = int(50000 / 5 / 0.2)
 H_no = 40
-device = torch.device("cuda:3")
+device = torch.device("cuda:6")
 lag = 20
 
 epoch_no = 400
@@ -40,9 +40,9 @@ iter_no = epoch_no * 980 // batch_size
 
 #V = np.load("/scratch/yjk27/CA1_clust4-60_noNA/data/vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy").reshape(-1,50001)[:,:50000]
 #V = np.load("/scratch/yjk27/CA1_clust4-60/data/V_diff_stimseed1.npy").reshape(-1,batch_length)
-V = np.load("/scratch/yjk27/CA1_clust4-60_AP/na_true_nona_pred/V_na_true_nona_pred_0.2ms.npy").reshape(-1,batch_length)
+V = np.load("/scratch/yjk27/CA1_clust4-60_AP/na_true_3noise3/V_na_true_3noise3_0.2ms.npy").reshape(-1,batch_length)
 #V = np.load("/scratch/yjk27/CA1_clust4-60_AP/diff_true/V_diff_true_0.2ms.npy").reshape(-1,batch_length)
-S = np.load("/scratch/yjk27/CA1_clust4-60_aSoma/data/spike_train_0.2ms.npy").reshape(-1,batch_length)
+S = np.load("/scratch/yjk27/CA1_clust4-60_AP/data/spike_train_0.2ms.npy").reshape(-1,batch_length)
 
 V-= np.mean(V)
 
@@ -81,8 +81,8 @@ bce_criterion = nn.BCELoss(reduction="mean")
 
 score_list = []
 
-for i in tnrange(iter_no):
-#for i in tnrange(10000):    
+#for i in tnrange(iter_no):
+for i in tnrange(15000):    
     s = time.time()
     model.train()
     optimizer.zero_grad()
@@ -116,5 +116,5 @@ for i in tnrange(iter_no):
         
         score_list.append(test_loss)
         print(i, test_loss, step_time)
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_aSoma/na_true_nona_pred/gru_l20_h40_0.2ms_i"+str(i)+".pt")
-        np.save("/scratch/yjk27/CA1_clust4-60_aSoma/na_true_nona_pred/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_AP/na_true_3noise3/gru_l20_h40_0.2ms_i"+str(i)+".pt")
+        np.save("/scratch/yjk27/CA1_clust4-60_AP/na_true_3noise3/gru_l20_h40_0.2ms_test_i"+str(i)+".npy", test_S_out.cpu().detach().numpy())
