@@ -31,24 +31,24 @@ class Clust_GRU(nn.Module):
         self.C_syn_e_raw = nn.Parameter(g_e * 0.01)
         self.C_syn_i_raw = nn.Parameter(g_i * 0.01)
         
-        g_e_help = torch.zeros(self.sub_no, self.E_no)
-        clust_idx = torch.tensor([0,2,3,1])
-        for c in range(4):
-            g_e_help[clust_idx[c], 43+60*c:43+60*(c+1)] = 0.25
+        #g_e_help = torch.zeros(self.sub_no, self.E_no)
+        #clust_idx = torch.tensor([0,2,3,1])
+        #for c in range(4):
+            #g_e_help[clust_idx[c], 43+60*c:43+60*(c+1)] = 0.25
         #self.C_syn_e_raw = nn.Parameter(g_e*0.01 + g_e_help)
         
-        self.custom_softmax = CustomSoftmax.apply
+        #self.custom_softmax = CustomSoftmax.apply
         
-    def forward(self, S_e, S_i, temp, test):
+    def forward(self, S_e, S_i, temp):
         T_data = S_e.shape[1]
         batch_size = S_e.shape[0]
         S_e = S_e * torch.exp(self.E_scale.reshape(1,1,-1))
         S_i = S_i * torch.exp(self.I_scale.reshape(1,1,-1))*(-1)
         
-        #C_syn_e = F.softmax(self.C_syn_e_raw/temp, 0)
-        #C_syn_i = F.softmax(self.C_syn_i_raw/temp, 0)
-        C_syn_e = self.custom_softmax(self.C_syn_e_raw)
-        C_syn_i = self.custom_softmax(self.C_syn_i_raw)
+        C_syn_e = F.softmax(self.C_syn_e_raw/temp, 0)
+        C_syn_i = F.softmax(self.C_syn_i_raw/temp, 0)
+        #C_syn_e = self.custom_softmax(self.C_syn_e_raw)
+        #C_syn_i = self.custom_softmax(self.C_syn_i_raw)
         
         S_e_sub = torch.matmul(S_e, C_syn_e.T.unsqueeze(0))
         S_i_sub = torch.matmul(S_i, C_syn_i.T.unsqueeze(0))
