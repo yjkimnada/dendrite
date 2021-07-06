@@ -14,7 +14,7 @@ import time
 from models.clust_gru import Clust_GRU
 
 base_dir = "/scratch/yjk27/"
-experiment = "clust8-30"
+experiment = "clust12-20"
 cell_type = "CA1"
 E_neural_file = "Espikes_neural.npz"
 I_neural_file = "Ispikes_neural.npz"
@@ -31,13 +31,13 @@ V = torch.from_numpy(V)
 T_train = 980 * 1000 * 50
 T_test = 1 * 1000 * 50
 H_no = 20
-sub_no = 9
+sub_no = 13
 E_no = 2000
 I_no = 200
 #E_no = e_idx.shape[0]
 #I_no = i_idx.shape[0]
 T_no = 500
-device = torch.device("cuda:2")
+device = torch.device("cuda:5")
 
 increment = 50
 batch_length = 50000
@@ -156,28 +156,38 @@ for i in tnrange(iter_no):
         
         C_syn_idx = torch.argmax(test_C_syn_e[:,880:1120], 0).float()
         
-        mode1, mode1_idx = torch.mode(C_syn_idx[:30])
-        mode2, mode2_idx = torch.mode(C_syn_idx[30:60])
-        mode3, mode3_idx = torch.mode(C_syn_idx[60:90])
-        mode4, mode4_idx = torch.mode(C_syn_idx[90:120])
-        mode5, mode5_idx = torch.mode(C_syn_idx[120:150])
-        mode6, mode6_idx = torch.mode(C_syn_idx[150:180])
-        mode7, mode7_idx = torch.mode(C_syn_idx[180:210])
-        mode8, mode8_idx = torch.mode(C_syn_idx[210:240])
-        mode1_no = torch.numel(torch.where(C_syn_idx[:30] == mode1)[0])
-        mode2_no = torch.numel(torch.where(C_syn_idx[30:60] == mode2)[0])
-        mode3_no = torch.numel(torch.where(C_syn_idx[60:90] == mode3)[0])
-        mode4_no = torch.numel(torch.where(C_syn_idx[90:120] == mode4)[0])
-        mode5_no = torch.numel(torch.where(C_syn_idx[120:150] == mode5)[0])
-        mode6_no = torch.numel(torch.where(C_syn_idx[150:180] == mode6)[0])
-        mode7_no = torch.numel(torch.where(C_syn_idx[180:210] == mode7)[0])
-        mode8_no = torch.numel(torch.where(C_syn_idx[210:240] == mode8)[0])
+        mode1, mode1_idx = torch.mode(C_syn_idx[:20])
+        mode2, mode2_idx = torch.mode(C_syn_idx[20:40])
+        mode3, mode3_idx = torch.mode(C_syn_idx[40:60])
+        mode4, mode4_idx = torch.mode(C_syn_idx[60:80])
+        mode5, mode5_idx = torch.mode(C_syn_idx[80:100])
+        mode6, mode6_idx = torch.mode(C_syn_idx[100:120])
+        mode7, mode7_idx = torch.mode(C_syn_idx[120:140])
+        mode8, mode8_idx = torch.mode(C_syn_idx[140:160])
+        mode9, mode9_idx = torch.mode(C_syn_idx[160:180])
+        mode10, mode10_idx = torch.mode(C_syn_idx[180:200])
+        mode11, mode11_idx = torch.mode(C_syn_idx[200:220])
+        mode12, mode12_idx = torch.mode(C_syn_idx[220:240])
+        mode1_no = torch.numel(torch.where(C_syn_idx[:20] == mode1)[0])
+        mode2_no = torch.numel(torch.where(C_syn_idx[20:40] == mode2)[0])
+        mode3_no = torch.numel(torch.where(C_syn_idx[40:60] == mode3)[0])
+        mode4_no = torch.numel(torch.where(C_syn_idx[60:80] == mode4)[0])
+        mode5_no = torch.numel(torch.where(C_syn_idx[80:100] == mode5)[0])
+        mode6_no = torch.numel(torch.where(C_syn_idx[100:120] == mode6)[0])
+        mode7_no = torch.numel(torch.where(C_syn_idx[120:140] == mode7)[0])
+        mode8_no = torch.numel(torch.where(C_syn_idx[140:160] == mode8)[0])
+        mode9_no = torch.numel(torch.where(C_syn_idx[160:180] == mode9)[0])
+        mode10_no = torch.numel(torch.where(C_syn_idx[180:200] == mode10)[0])
+        mode11_no = torch.numel(torch.where(C_syn_idx[200:220] == mode11)[0])
+        mode12_no = torch.numel(torch.where(C_syn_idx[220:240] == mode12)[0])
                         
         print(i, np.round(test_score,6), np.round(train_score,6), time_step)
         print(mode1.item(), mode2.item(), mode3.item(), mode4.item(),
-             mode5.item(), mode6.item(), mode7.item(), mode8.item())
+             mode5.item(), mode6.item(), mode7.item(), mode8.item(),
+             mode9.item(), mode10.item(), mode11.item(), mode12.item())
         print(mode1_no, mode2_no, mode3_no, mode4_no,
-             mode5_no, mode6_no, mode7_no, mode8_no)
+             mode5_no, mode6_no, mode7_no, mode8_no,
+             mode9_no, mode10_no, mode11_no, mode12_no)
         print("------------------------")
         
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust8-30/clust/gru_s9_h20_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust12-20/clust/gru_s13_h20_i"+str(i)+".pt")
