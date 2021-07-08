@@ -37,7 +37,7 @@ I_no = 200
 #E_no = e_idx.shape[0]
 #I_no = i_idx.shape[0]
 T_no = 500
-device = torch.device("cuda:6")
+device = torch.device("cuda:5")
 
 increment = 50
 batch_length = 50000
