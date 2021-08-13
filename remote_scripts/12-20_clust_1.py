@@ -28,7 +28,7 @@ V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten
 V = torch.from_numpy(V)
 V -= torch.mean(V)
 
-T_train = 980 * 1000 * 50
+T_train = 245 * 1000 * 50
 T_test = 1 * 1000 * 50
 H_no = 20
 sub_no = 13
@@ -42,17 +42,17 @@ device = torch.device("cuda:5")
 increment = 50
 batch_length = 50000
 batch_size = 5
-iter_no = 9800*2
+iter_no = 9800
 epoch_no = iter_no*batch_length*batch_size//T_train
 
 V_train = V[:T_train].float()
 #V_test = V[-50000:].to(device).float()
-V_test = V[T_train:T_train+T_test].to(device).float()
+V_test = V[-T_test:].to(device).float()
 
 #test_E_neural = E_neural[-50000:].toarray()
 #test_I_neural = I_neural[-50000:].toarray()
-test_E_neural = E_neural[T_train:T_train+T_test].toarray()
-test_I_neural = I_neural[T_train:T_train+T_test].toarray()
+test_E_neural = E_neural[-T_test:].toarray()
+test_I_neural = I_neural[-T_test:].toarray()
 train_E_neural = E_neural[:T_train]
 train_I_neural = I_neural[:T_train]
 
