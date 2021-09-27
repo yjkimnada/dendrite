@@ -16,19 +16,19 @@ from models.clust_gru import Clust_GRU
 base_dir = "/scratch/yjk27/"
 experiment = "clust8-30_noNA"
 cell_type = "CA1"
-E_neural_file = "Espikes_neural.npz"
-I_neural_file = "Ispikes_neural.npz"
-V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
+E_neural_file = "Espikes_neural_set3.npz"
+I_neural_file = "Ispikes_neural_set3.npz"
+V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set3.npy"
 #V_file = "V_diff_stimseed1.npy"
 
-E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+E_neural_file)
-I_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+I_neural_file)
+E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+"clust4-60"+"/data/"+E_neural_file)
+I_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+"clust4-60"+"/data/"+I_neural_file)
 V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten()
 #V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)
 V = torch.from_numpy(V)
 V -= torch.mean(V)
 
-T_train = 196 * 1000 * 50
+T_train = 980 * 1000 * 50
 T_test = 1 * 1000 * 50
 H_no = 20
 sub_no = 9
@@ -37,12 +37,12 @@ I_no = 200
 #E_no = e_idx.shape[0]
 #I_no = i_idx.shape[0]
 T_no = 500
-device = torch.device("cuda:2")
+device = torch.device("cuda:4")
 
 increment = 50
 batch_length = 50000
-batch_size = 4
-iter_no = 9800
+batch_size = 5
+iter_no = 9800*2
 epoch_no = iter_no*batch_length*batch_size//T_train
 
 V_train = V[:T_train].float()
@@ -113,7 +113,7 @@ score_list = []
 temp_list = np.logspace(0,-3,100)
 temp_count = 0
 
-for i in tnrange(iter_no):
+for i in tnrange(12000):
     s = time.time()
     model.train()
     optimizer.zero_grad()
