@@ -16,9 +16,9 @@ from models.clust_gru import Clust_GRU
 base_dir = "/scratch/yjk27/"
 experiment = "clust4-60_noNA"
 cell_type = "CA1"
-E_neural_file = "Espikes_neural_set3.npz"
-I_neural_file = "Ispikes_neural_set3.npz"
-V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set3.npy"
+E_neural_file = "Espikes_neural_set5.npz"
+I_neural_file = "Ispikes_neural_set5.npz"
+V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set5.npy"
 #V_file = "V_diff_stimseed1.npy"
 
 E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+"clust4-60"+"/data/"+E_neural_file)
@@ -37,7 +37,7 @@ I_no = 200
 #E_no = e_idx.shape[0]
 #I_no = i_idx.shape[0]
 T_no = 500
-device = torch.device("cuda:2")
+device = torch.device("cuda:0")
 
 increment = 50
 batch_length = 50000
