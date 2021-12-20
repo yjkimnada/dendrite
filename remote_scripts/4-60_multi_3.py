@@ -10,17 +10,20 @@ from sklearn.metrics import explained_variance_score
 import scipy
 import time
 
-from models.sub_cos_glm import Sub_Cos_GLM
-from models.sub_tcn import Sub_TCN
-from models.gru import GRU
+#from models.sub_cos_glm import Sub_Cos_GLM
+#from models.sub_tcn import Sub_TCN
+#from models.gru import GRU
+#from models.gru_stacked import GRU_Stacked
+#from models.gru_multilayer import GRU_Multilayer
+from models.sub_cos_glm_multilayer import Sub_Cos_GLM_Multilayer
 
 base_dir = "/scratch/yjk27/"
-experiment = "clust8-30"
+experiment = "clust4-60"
 cell_type = "CA1"
 E_neural_file = "Espikes_neural.npz"
 I_neural_file = "Ispikes_neural.npz"
-V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
-#V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
+V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set1.npy"
+#V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set1.npy"
 #V_file = "V_diff_stimseed1.npy"
 
 E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+E_neural_file)
@@ -30,8 +33,8 @@ V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten
 V = torch.from_numpy(V)
 V -= torch.mean(V)
 
-C_syn_e = np.load("/scratch/yjk27/CA1_clust8-30/data/handsub9_C_syn_e.npy")
-C_syn_i = np.load("/scratch/yjk27/CA1_clust8-30/data/handsub9_C_syn_i.npy")
+C_syn_e = np.load("/scratch/yjk27/CA1_clust4-60/data/handsub4+4_C_syn_e.npy")
+C_syn_i = np.load("/scratch/yjk27/CA1_clust4-60/data/handsub4+4_C_syn_i.npy")
 C_syn_e = torch.from_numpy(C_syn_e).float()
 C_syn_i = torch.from_numpy(C_syn_i).float()
 
@@ -40,12 +43,12 @@ C_syn_i = torch.from_numpy(C_syn_i).float()
 
 T_train = 980 * 1000 * 50
 T_test = 1 * 1000 * 50
-H_no = 3
-sub_no = 9
+H_no = 2
+sub_no = 8
 E_no = 2000
 I_no = 200
 T_no = 500
-device = torch.device('cuda:4')
+device = torch.device('cuda:1')
 
 increment = 50
 batch_length = 50000
@@ -78,9 +81,11 @@ train_idx = torch.from_numpy(train_idx)
 #################################
 #################################
 
-model = Sub_Cos_GLM(C_syn_e.to(device), C_syn_i.to(device), T_no, H_no, device)
-#model = GRU(C_syn_e.to(device), C_syn_i.to(device), H_no, device)
+#model = Sub_Cos_GLM(C_syn_e.to(device), C_syn_i.to(device), T_no, H_no, device)
+#model = GRU_Stacked(C_syn_e.to(device), C_syn_i.to(device), H_no, device)
+#model = GRU_Multilayer(C_syn_e.to(device), C_syn_i.to(device), H_no, device)
 #model = Sub_TCN(C_syn_e.to(device), C_syn_i.to(device), T_no, H_no, device)
+model = Sub_Cos_GLM_Multilayer(C_syn_e.to(device), C_syn_i.to(device), T_no, H_no, device)
 
 # GLM (1.025 for V_diff, 1 for noNA)
 optimizer = torch.optim.Adam(model.parameters(), lr = 0.005/(1.025**100))
@@ -89,6 +94,7 @@ scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestone
 
 # GRU (1 for V_diff, 1 for noNA)
 #optimizer = torch.optim.Adam(model.parameters(), lr = 0.0025/(1**100))
+#optimizer = torch.optim.SGD(model.parameters(), lr = 0.0025/(1**100), momentum=0.9)
 #milestones = np.arange(increment-1, increment*100, increment)
 #scheduler = torch.optim.lr_scheduler.MultiStepLR(optimizer, milestones=milestones, gamma=1)
 
@@ -116,6 +122,7 @@ for i in tnrange(iter_no):
     #V_pred, _, _ = model(batch_E_neural[:,5000:35000,e_idx], batch_I_neural[:,5000:35000,i_idx])
     
     loss = torch.mean((V_pred- batch_V[:,:] )**2)
+    #loss = torch.var(V_pred - batch_V)
     loss.backward()
     optimizer.step()
     scheduler.step()
@@ -134,4 +141,4 @@ for i in tnrange(iter_no):
         print(i, np.round(test_score,6),
               np.round(test_mse,6), time_diff)
 
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust8-30/whole/glm_s9_h3_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60/whole/glmmulti_s8_h2_i"+str(i)+".pt")

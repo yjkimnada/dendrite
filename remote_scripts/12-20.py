@@ -15,7 +15,7 @@ from models.sub_tcn import Sub_TCN
 from models.gru import GRU
 
 base_dir = "/scratch/yjk27/"
-experiment = "clust8-30"
+experiment = "clust12-20"
 cell_type = "CA1"
 E_neural_file = "Espikes_neural.npz"
 I_neural_file = "Ispikes_neural.npz"
@@ -30,8 +30,8 @@ V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten
 V = torch.from_numpy(V)
 V -= torch.mean(V)
 
-C_syn_e = np.load("/scratch/yjk27/CA1_clust8-30/data/handsub9_C_syn_e.npy")
-C_syn_i = np.load("/scratch/yjk27/CA1_clust8-30/data/handsub9_C_syn_i.npy")
+C_syn_e = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub13_C_syn_e.npy")
+C_syn_i = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub13_C_syn_i.npy")
 C_syn_e = torch.from_numpy(C_syn_e).float()
 C_syn_i = torch.from_numpy(C_syn_i).float()
 
@@ -41,11 +41,11 @@ C_syn_i = torch.from_numpy(C_syn_i).float()
 T_train = 980 * 1000 * 50
 T_test = 1 * 1000 * 50
 H_no = 3
-sub_no = 9
+sub_no = 13
 E_no = 2000
 I_no = 200
 T_no = 500
-device = torch.device('cuda:4')
+device = torch.device('cuda:5')
 
 increment = 50
 batch_length = 50000
@@ -134,4 +134,4 @@ for i in tnrange(iter_no):
         print(i, np.round(test_score,6),
               np.round(test_mse,6), time_diff)
 
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust8-30/whole/glm_s9_h3_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust12-20/whole/glm_s13_h3_i"+str(i)+".pt")

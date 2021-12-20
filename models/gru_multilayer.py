@@ -19,12 +19,14 @@ class GRU_Multilayer(nn.Module):
         
         self.rnn = nn.ModuleList()
         self.linear = nn.ModuleList()
-        for s in range(self.sub_no):
+        for s in range(self.sub_no-1):
             if s%2 == 0:
                 self.rnn.append(nn.GRU(1, self.H_no, batch_first=True))
             elif s%2 == 1:
                 self.rnn.append(nn.GRU(2, self.H_no, batch_first=True))
             self.linear.append(nn.Linear(self.H_no, 1))
+        self.rnn.append(nn.GRU(1, self.H_no, batch_first=True))
+        self.linear.append(nn.Linear(self.H_no, 1))
 
         self.V_o = nn.Parameter(torch.zeros(1))
         
@@ -38,7 +40,7 @@ class GRU_Multilayer(nn.Module):
         S_i_sub = torch.matmul(S_i, self.C_syn_i.T.unsqueeze(0))
         S_sub = S_e_sub + S_i_sub
         
-        sub_out = torch.zeros(batch_size, T_data, self.sub_no).to(self.device)
+        sub_out = torch.zeros(batch_size, T_data, self.sub_no//2+1).to(self.device)
         
         for s in range(self.sub_no//2):
             rnn_out, _ = self.rnn[s*2](S_sub[:,:,s*2].unsqueeze(2))
@@ -46,6 +48,9 @@ class GRU_Multilayer(nn.Module):
             rnn_out2, _ = self.rnn[s*2+1](torch.cat((S_sub[:,:,s*2+1].unsqueeze(2), lin_out.unsqueeze(2)), 2))
             lin_out2 = self.linear[s*2+1](rnn_out2.reshape(-1, self.H_no)).reshape(batch_size, T_data)
             sub_out[:,:,s] = sub_out[:,:,s] + lin_out2
+        rnn_out, _ = self.rnn[-1](S_sub[:,:,-1].unsqueeze(2))
+        lin_out = self.linear[-1](rnn_out.reshape(-1, self.H_no)).reshape(batch_size, T_data)
+        sub_out[:,:,-1] = sub_out[:,:,-1] + lin_out
 
         final = torch.sum(sub_out, 2) + self.V_o
         
