@@ -18,12 +18,12 @@ import time
 from models.sub_cos_glm_multilayer import Sub_Cos_GLM_Multilayer
 
 base_dir = "/scratch/yjk27/"
-experiment = "clust4-60"
+experiment = "clust4-60_noNA"
 cell_type = "CA1"
 E_neural_file = "Espikes_neural.npz"
 I_neural_file = "Ispikes_neural.npz"
-V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set1.npy"
-#V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set1.npy"
+#V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set1.npy"
+V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1_set1.npy"
 #V_file = "V_diff_stimseed1.npy"
 
 E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+E_neural_file)
@@ -43,7 +43,7 @@ C_syn_i = torch.from_numpy(C_syn_i).float()
 
 T_train = 980 * 1000 * 50
 T_test = 1 * 1000 * 50
-H_no = 2
+H_no = 1
 sub_no = 8
 E_no = 2000
 I_no = 200
@@ -141,4 +141,4 @@ for i in tnrange(iter_no):
         print(i, np.round(test_score,6),
               np.round(test_mse,6), time_diff)
 
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60/whole/glmmulti_s8_h2_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust4-60_noNA/hand/glmmulti_s8_h1_i"+str(i)+".pt")
