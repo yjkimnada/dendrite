@@ -15,12 +15,12 @@ from models.sub_tcn import Sub_TCN
 from models.gru import GRU
 
 base_dir = "/scratch/yjk27/"
-experiment = "clust8-30"
+experiment = "clust8-30_noNA"
 cell_type = "CA1"
 E_neural_file = "Espikes_neural.npz"
 I_neural_file = "Ispikes_neural.npz"
-V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
-#V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
+#V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
+V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
 #V_file = "V_diff_stimseed1.npy"
 
 E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+E_neural_file)
@@ -45,7 +45,7 @@ sub_no = 9
 E_no = 2000
 I_no = 200
 T_no = 500
-device = torch.device('cuda:4')
+device = torch.device('cuda:2')
 
 increment = 50
 batch_length = 50000
@@ -134,4 +134,4 @@ for i in tnrange(iter_no):
         print(i, np.round(test_score,6),
               np.round(test_mse,6), time_diff)
 
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust8-30/whole/glm_s9_h3_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust8-30_noNA/hand/glm_s9_h3_i"+str(i)+".pt")

@@ -17,20 +17,20 @@ import time
 from models.gru_multilayer import GRU_Multilayer
 
 base_dir = "/scratch/yjk27/"
-experiment = "clust12-20"
+experiment = "clust12-20_noNA"
 cell_type = "CA1"
 E_neural_file = "Espikes_neural.npz"
 I_neural_file = "Ispikes_neural.npz"
 #V_file  = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
-#V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
-V_file = "V_diff_stimseed1.npy"
+V_file = "vdata_T10_Ne2000_gA0.6_tauA1_gN0.8_Ni200_gG0.1_gB0.1_noDendNa_Er0.5_Ir7.4_random_NR_rep1000_stimseed1.npy"
+#V_file = "V_diff_stimseed1.npy"
 
 E_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+E_neural_file)
 I_neural = scipy.sparse.load_npz(base_dir+cell_type+"_"+experiment+"/data/"+I_neural_file)
-#V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten()
-V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)
+V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten()
+#V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)
 V = torch.from_numpy(V)
-#V -= torch.mean(V)
+V -= torch.mean(V)
 
 C_syn_e = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub12+12_C_syn_e.npy")
 C_syn_i = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub12+12_C_syn_i.npy")
@@ -137,4 +137,4 @@ for i in tnrange(iter_no):
         print(i, np.round(test_score,6),
               np.round(test_mse,6), time_diff)
 
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust12-20/hand/grumulti_s24_h20_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust12-20_noNA/hand/grumulti_s24_h20_i"+str(i)+".pt")

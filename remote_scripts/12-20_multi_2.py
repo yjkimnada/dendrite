@@ -12,9 +12,9 @@ import time
 
 #from models.sub_cos_glm import Sub_Cos_GLM
 #from models.sub_tcn import Sub_TCN
-#from models.gru import GRU
+from models.gru import GRU
 #from models.gru_stacked import GRU_Stacked
-from models.gru_multilayer import GRU_Multilayer
+#from models.gru_multilayer import GRU_Multilayer
 
 base_dir = "/scratch/yjk27/"
 experiment = "clust12-20"
@@ -32,8 +32,8 @@ V = np.load(base_dir+cell_type+"_"+experiment+"/data/"+V_file)[:,:50000].flatten
 V = torch.from_numpy(V)
 V -= torch.mean(V)
 
-C_syn_e = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub12+12_C_syn_e.npy")
-C_syn_i = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub12+12_C_syn_i.npy")
+C_syn_e = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub1_C_syn_e.npy")
+C_syn_i = np.load("/scratch/yjk27/CA1_clust12-20/data/handsub1_C_syn_i.npy")
 C_syn_e = torch.from_numpy(C_syn_e).float()
 C_syn_i = torch.from_numpy(C_syn_i).float()
 
@@ -47,7 +47,7 @@ sub_no = 24
 E_no = 2000
 I_no = 200
 T_no = 500
-device = torch.device('cuda:3')
+device = torch.device('cuda:6')
 
 increment = 50
 batch_length = 50000
@@ -82,7 +82,7 @@ train_idx = torch.from_numpy(train_idx)
 
 #model = Sub_Cos_GLM(C_syn_e.to(device), C_syn_i.to(device), T_no, H_no, device)
 #model = GRU_Stacked(C_syn_e.to(device), C_syn_i.to(device), H_no, device)
-model = GRU_Multilayer(C_syn_e.to(device), C_syn_i.to(device), H_no, device)
+model = GRU(C_syn_e.to(device), C_syn_i.to(device), H_no, device)
 #model = Sub_TCN(C_syn_e.to(device), C_syn_i.to(device), T_no, H_no, device)
 
 # GLM (1.025 for V_diff, 1 for noNA)
@@ -137,4 +137,4 @@ for i in tnrange(iter_no):
         print(i, np.round(test_score,6),
               np.round(test_mse,6), time_diff)
 
-        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust12-20/whole/grumulti_s24_h20_i"+str(i)+".pt")
+        torch.save(model.state_dict(), "/scratch/yjk27/CA1_clust12-20/global/gru_soma_s1_h20_i"+str(i)+".pt")
